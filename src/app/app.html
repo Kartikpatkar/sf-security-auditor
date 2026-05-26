@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SF Security Auditor</title>
+    <link rel="stylesheet" href="./app.css">
+  </head>
+  <body>
+    <div class="page-shell">
+      <aside class="sidebar-panel">
+        <div>
+          <p class="eyebrow">Privacy-first Salesforce audit</p>
+          <h1>SF Security Auditor</h1>
+          <p class="lede">A full-page extension workspace for Salesforce security discovery, risk review, and report generation.</p>
+        </div>
+
+        <section class="sidebar-card">
+          <p class="section-label">Session</p>
+          <p id="connection-status" class="status-pill">Waiting for Salesforce tab</p>
+          <p id="status-message" class="support-copy">Open the app from a logged-in Salesforce tab, or reconnect to a valid org tab.</p>
+        </section>
+
+        <section class="sidebar-card">
+          <p class="section-label">Actions</p>
+          <div class="action-stack">
+            <button id="detect-org-button" class="primary-button" type="button">Detect Org</button>
+            <button id="run-audit-button" class="secondary-button" type="button">Run Overview Audit</button>
+            <button id="run-profile-inventory-button" class="secondary-button" type="button">Run Profile Inventory</button>
+            <button id="run-system-permissions-button" class="secondary-button" type="button">Run System Permissions</button>
+            <button id="run-object-access-button" class="secondary-button" type="button">Run Object Access</button>
+            <button id="run-metadata-inventory-button" class="secondary-button" type="button">Run Metadata Inventory</button>
+            <button id="use-current-tab-button" class="ghost-button" type="button">Use Current Salesforce Tab</button>
+          </div>
+        </section>
+
+        <section class="sidebar-card">
+          <p class="section-label">Source Tab</p>
+          <dl class="source-list">
+            <div>
+              <dt>Tab Id</dt>
+              <dd id="source-tab-id">-</dd>
+            </div>
+            <div>
+              <dt>Origin</dt>
+              <dd id="source-origin">-</dd>
+            </div>
+            <div>
+              <dt>UI</dt>
+              <dd id="ui-type">-</dd>
+            </div>
+          </dl>
+        </section>
+      </aside>
+
+      <main class="main-panel">
+        <nav class="section-nav" aria-label="Dashboard Sections">
+          <button id="nav-overview" class="nav-button is-active" type="button">Overview</button>
+          <button id="nav-profiles" class="nav-button" type="button">Profiles</button>
+          <button id="nav-permissions" class="nav-button" type="button">Permissions</button>
+          <button id="nav-object-access" class="nav-button" type="button">Object Access</button>
+          <button id="nav-metadata" class="nav-button" type="button">Metadata</button>
+        </nav>
+
+        <section id="view-overview" class="dashboard-view is-active">
+          <section class="hero-panel">
+            <div>
+              <p class="eyebrow">Overview</p>
+              <h2>Org Security Workspace</h2>
+              <p class="support-copy">This baseline app detects the active Salesforce org and runs an initial overview audit without exporting data outside the browser.</p>
+            </div>
+            <div class="metrics-row">
+              <article class="metric-card accent-card">
+                <span class="metric-label">Org</span>
+                <strong id="org-name">Not connected</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Instance</span>
+                <strong id="org-instance">-</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">API Version</span>
+                <strong id="api-version">-</strong>
+              </article>
+              <article class="metric-card score-card">
+                <span class="metric-label">Security Score</span>
+                <strong id="security-score">Pending</strong>
+              </article>
+            </div>
+          </section>
+
+          <section class="content-grid">
+            <section class="panel-card">
+              <div class="panel-heading">
+                <p class="section-label">Inventory</p>
+                <span class="badge">MVP</span>
+              </div>
+              <dl class="inventory-grid">
+                <div>
+                  <dt>Active Users</dt>
+                  <dd id="active-users">-</dd>
+                </div>
+                <div>
+                  <dt>Profiles</dt>
+                  <dd id="profile-count">-</dd>
+                </div>
+                <div>
+                  <dt>Permission Sets</dt>
+                  <dd id="permission-set-count">-</dd>
+                </div>
+                <div>
+                  <dt>Org Type</dt>
+                  <dd id="org-type">-</dd>
+                </div>
+              </dl>
+            </section>
+
+            <section class="panel-card">
+              <div class="panel-heading">
+                <p class="section-label">Initial Findings</p>
+                <span id="finding-count" class="badge badge-strong">0</span>
+              </div>
+              <ul id="findings-list" class="findings-list">
+                <li class="empty-state">Run the overview audit to populate findings.</li>
+              </ul>
+            </section>
+          </section>
+        </section>
+
+        <section id="view-profiles" class="dashboard-view">
+          <section class="hero-panel">
+            <div>
+              <p class="eyebrow">Profile Inventory</p>
+              <h2>Profile Access Baseline</h2>
+              <p class="support-copy">This first audit module inventories profile-level access and user counts. MFA, session restrictions, and login IP restrictions are marked for later metadata-backed enrichment.</p>
+            </div>
+            <div class="metrics-row compact-metrics-row">
+              <article class="metric-card accent-card">
+                <span class="metric-label">Total Profiles</span>
+                <strong id="profiles-total">-</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Custom Profiles</span>
+                <strong id="profiles-custom">-</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">API Enabled</span>
+                <strong id="profiles-api-enabled">-</strong>
+              </article>
+              <article class="metric-card score-card">
+                <span class="metric-label">High Risk</span>
+                <strong id="profiles-high-risk">-</strong>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel-card">
+            <div class="panel-heading">
+              <p class="section-label">Profile Rows</p>
+              <span id="profile-row-count" class="badge badge-strong">0</span>
+            </div>
+            <div class="table-shell">
+              <table class="audit-table">
+                <thead>
+                  <tr>
+                    <th>Profile</th>
+                    <th>Users</th>
+                    <th>License</th>
+                    <th>Type</th>
+                    <th>API</th>
+                    <th>Modify All Data</th>
+                    <th>View All Data</th>
+                    <th>Customize App</th>
+                    <th>Manage Users</th>
+                    <th>Severity</th>
+                  </tr>
+                </thead>
+                <tbody id="profile-table-body">
+                  <tr>
+                    <td colspan="10" class="empty-state table-empty-state">Run profile inventory to load rows.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section id="view-permissions" class="dashboard-view">
+          <section class="hero-panel">
+            <div>
+              <p class="eyebrow">System Permissions</p>
+              <h2>System Permissions Matrix</h2>
+              <p class="support-copy">This module highlights high-value system permissions across profiles and permission sets, with severity and recommendations for review.</p>
+            </div>
+            <div class="metrics-row compact-metrics-row">
+              <article class="metric-card accent-card">
+                <span class="metric-label">Rows</span>
+                <strong id="permissions-total-rows">-</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Principals</span>
+                <strong id="permissions-principals">-</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">High Risk</span>
+                <strong id="permissions-high-risk">-</strong>
+              </article>
+              <article class="metric-card score-card">
+                <span class="metric-label">Medium Risk</span>
+                <strong id="permissions-medium-risk">-</strong>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel-card">
+            <div class="panel-heading">
+              <p class="section-label">Permission Rows</p>
+              <span id="permissions-row-count" class="badge badge-strong">0</span>
+            </div>
+            <div class="table-shell">
+              <table class="audit-table">
+                <thead>
+                  <tr>
+                    <th>Principal Type</th>
+                    <th>Principal</th>
+                    <th>Permission</th>
+                    <th>Severity</th>
+                    <th>Category</th>
+                    <th>Recommendation</th>
+                  </tr>
+                </thead>
+                <tbody id="permissions-table-body">
+                  <tr>
+                    <td colspan="6" class="empty-state table-empty-state">Run system permissions to load rows.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section id="view-object-access" class="dashboard-view">
+          <section class="hero-panel">
+            <div>
+              <p class="eyebrow">Object Access</p>
+              <h2>Object Access Matrix</h2>
+              <p class="support-copy">This module inventories object-level access across profiles, permission sets, and aggregated permission set groups for standard, custom, and managed-package objects.</p>
+            </div>
+            <div class="metrics-row compact-metrics-row">
+              <article class="metric-card accent-card">
+                <span class="metric-label">Rows</span>
+                <strong id="object-access-total-rows">-</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Profiles</span>
+                <strong id="object-access-profile-rows">-</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Permission Sets</span>
+                <strong id="object-access-permission-set-rows">-</strong>
+              </article>
+              <article class="metric-card score-card">
+                <span class="metric-label">High Risk</span>
+                <strong id="object-access-high-risk">-</strong>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel-card">
+            <div class="panel-heading">
+              <p class="section-label">Object Access Rows</p>
+              <span id="object-access-row-count" class="badge badge-strong">0</span>
+            </div>
+            <div class="table-shell">
+              <table class="audit-table">
+                <thead>
+                  <tr>
+                    <th>Principal Type</th>
+                    <th>Principal</th>
+                    <th>Object</th>
+                    <th>Category</th>
+                    <th>Read</th>
+                    <th>Create</th>
+                    <th>Edit</th>
+                    <th>Delete</th>
+                    <th>View All</th>
+                    <th>Modify All</th>
+                    <th>Severity</th>
+                  </tr>
+                </thead>
+                <tbody id="object-access-table-body">
+                  <tr>
+                    <td colspan="11" class="empty-state table-empty-state">Run object access to load rows.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section id="view-metadata" class="dashboard-view">
+          <section class="hero-panel">
+            <div>
+              <p class="eyebrow">Metadata Inventory</p>
+              <h2>Metadata Surface Snapshot</h2>
+              <p class="support-copy">This section uses your previous-project Salesforce metadata helpers to inspect metadata types and count core metadata members in the current org.</p>
+            </div>
+            <div class="metrics-row compact-metrics-row">
+              <article class="metric-card accent-card">
+                <span class="metric-label">Metadata Types</span>
+                <strong id="metadata-types-count">-</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Apex Classes</span>
+                <strong id="metadata-apex-count">-</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-label">Custom Objects</span>
+                <strong id="metadata-custom-object-count">-</strong>
+              </article>
+              <article class="metric-card score-card">
+                <span class="metric-label">Permission Sets</span>
+                <strong id="metadata-permission-set-count">-</strong>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel-card">
+            <div class="panel-heading">
+              <p class="section-label">Metadata Types</p>
+              <span id="metadata-row-count" class="badge badge-strong">0</span>
+            </div>
+            <div class="table-shell">
+              <table class="audit-table">
+                <thead>
+                  <tr>
+                    <th>Metadata Type</th>
+                    <th>Directory</th>
+                    <th>Suffix</th>
+                    <th>In Folder</th>
+                    <th>Meta File</th>
+                  </tr>
+                </thead>
+                <tbody id="metadata-table-body">
+                  <tr>
+                    <td colspan="5" class="empty-state table-empty-state">Run metadata inventory to load metadata types.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
