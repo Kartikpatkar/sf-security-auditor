@@ -769,16 +769,16 @@ function setActiveView(viewName) {
   const isObjectAccess = viewName === 'object-access';
   const isMetadata = viewName === 'metadata';
 
-  elements.navOverview.classList.toggle('is-active', isOverview);
-  elements.navProfiles.classList.toggle('is-active', isProfiles);
-  elements.navPermissions.classList.toggle('is-active', isPermissions);
-  elements.navObjectAccess.classList.toggle('is-active', isObjectAccess);
-  elements.navMetadata.classList.toggle('is-active', isMetadata);
-  elements.overviewView.classList.toggle('is-active', isOverview);
-  elements.profilesView.classList.toggle('is-active', isProfiles);
-  elements.permissionsView.classList.toggle('is-active', isPermissions);
-  elements.objectAccessView.classList.toggle('is-active', isObjectAccess);
-  elements.metadataView.classList.toggle('is-active', isMetadata);
+  elements.navOverview.classList.toggle('active', isOverview);
+  elements.navProfiles.classList.toggle('active', isProfiles);
+  elements.navPermissions.classList.toggle('active', isPermissions);
+  elements.navObjectAccess.classList.toggle('active', isObjectAccess);
+  elements.navMetadata.classList.toggle('active', isMetadata);
+  elements.overviewView.classList.toggle('active', isOverview);
+  elements.profilesView.classList.toggle('active', isProfiles);
+  elements.permissionsView.classList.toggle('active', isPermissions);
+  elements.objectAccessView.classList.toggle('active', isObjectAccess);
+  elements.metadataView.classList.toggle('active', isMetadata);
 }
 
 function isSupportedSalesforceUrl(url) {
