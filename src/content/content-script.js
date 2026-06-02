@@ -1,9 +1,75 @@
 (function initializeContentRuntime() {
   const PAGE_CONTEXT_EVENT = 'sfsa:page-context';
+  const PROFILE_METADATA_CACHE_TTL_MS = 5 * 60 * 1000;
+  const METADATA_INVENTORY_CACHE_TTL_MS = 5 * 60 * 1000;
   let latestPageContext = null;
+  const metadataCache = {
+    profileMetadata: new Map(),
+    inventory: new Map()
+  };
 
   injectPageBridge();
   document.addEventListener(PAGE_CONTEXT_EVENT, handlePageContext);
+
+  // Intercept global fetch in this content script environment to route through the background page
+  // This completely bypasses page-level CORS and CSP blocks in Chrome extensions
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async function (input, init) {
+    const url = typeof input === 'string' ? input : input.url;
+
+    if (url.includes('salesforce.com') || url.includes('force.com') || url.startsWith('/services/')) {
+      try {
+        const method = init?.method || 'GET';
+        
+        // Serialize headers
+        const headers = {};
+        if (init?.headers) {
+          if (init.headers instanceof Headers) {
+            for (const [key, val] of init.headers.entries()) {
+              headers[key] = val;
+            }
+          } else if (Array.isArray(init.headers)) {
+            for (const [key, val] of init.headers) {
+              headers[key] = val;
+            }
+          } else {
+            Object.assign(headers, init.headers);
+          }
+        }
+
+        // Serialize body
+        let body = undefined;
+        if (init?.body) {
+          body = init.body;
+        }
+
+        const response = await chrome.runtime.sendMessage({
+          type: 'sfsa:proxyFetch',
+          payload: {
+            url: url.startsWith('/') ? `${window.location.origin}${url}` : url,
+            method,
+            headers,
+            body
+          }
+        });
+
+        if (!response?.ok) {
+          throw new Error(response?.error || 'Proxy fetch failed.');
+        }
+
+        return new Response(response.data.bodyText, {
+          status: response.data.status,
+          statusText: response.data.statusText,
+          headers: new Headers(response.data.headers)
+        });
+      } catch (error) {
+        console.error('[SFSA Proxy Fetch] Failed:', error);
+        throw error;
+      }
+    }
+
+    return originalFetch.apply(this, arguments);
+  };
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === 'sfsa:getOrgContext') {
@@ -67,8 +133,8 @@
 
   async function resolveOrgContext() {
     const discoveredContext = latestPageContext || fallbackOrgContext();
-    const apiVersion = await resolveApiVersion(discoveredContext.apiVersion);
     const sessionContext = await resolveSessionContext(discoveredContext.orgUrl);
+    const apiVersion = await resolveApiVersion(discoveredContext.apiVersion, sessionContext);
 
     return {
       ...discoveredContext,
@@ -113,9 +179,12 @@
     return response.data;
   }
 
-  async function resolveApiVersion(preferredVersion) {
+  async function resolveApiVersion(preferredVersion, sessionContext = {}) {
     try {
-      const versions = await fetchJson('/services/data/');
+      const versions = await fetchJson('/services/data/', {
+        instanceUrl: sessionContext.instanceUrl,
+        sessionId: sessionContext.sessionId
+      });
 
       if (!Array.isArray(versions) || versions.length === 0) {
         return preferredVersion || '60.0';
@@ -134,13 +203,14 @@
     const orgContext = payload.orgContext || await resolveOrgContext();
     const apiVersion = orgContext.apiVersion;
     const basePath = `/services/data/v${apiVersion}`;
+    const requestOptions = buildRestRequestOptions(orgContext);
 
     const [organization, activeUsers, profiles, permissionSets, activeGuestUsers] = await Promise.all([
-      queryOne(basePath, 'SELECT Name, InstanceName, OrganizationType FROM Organization LIMIT 1'),
-      countQuery(basePath, 'SELECT COUNT() FROM User WHERE IsActive = true'),
-      countQuery(basePath, 'SELECT COUNT() FROM Profile'),
-      countQuery(basePath, 'SELECT COUNT() FROM PermissionSet WHERE IsOwnedByProfile = false'),
-      countQuery(basePath, "SELECT COUNT() FROM User WHERE IsActive = true AND UserType = 'Guest'")
+      queryOne(basePath, 'SELECT Name, InstanceName, OrganizationType FROM Organization LIMIT 1', requestOptions),
+      countQuery(basePath, 'SELECT COUNT() FROM User WHERE IsActive = true', requestOptions),
+      countQuery(basePath, 'SELECT COUNT() FROM Profile', requestOptions),
+      countQuery(basePath, 'SELECT COUNT() FROM PermissionSet WHERE IsOwnedByProfile = false', requestOptions),
+      countQuery(basePath, "SELECT COUNT() FROM User WHERE IsActive = true AND UserType = 'Guest'", requestOptions)
     ]);
 
     const overview = {
@@ -165,24 +235,32 @@
 
   async function runProfileInventoryAudit(payload) {
     const orgContext = payload.orgContext || await resolveOrgContext();
+    const forceMetadataRefresh = Boolean(payload.forceMetadataRefresh);
     const apiVersion = orgContext.apiVersion;
     const basePath = `/services/data/v${apiVersion}`;
+    const requestOptions = buildRestRequestOptions(orgContext);
+    const profileQuery = await buildProfileInventoryQuery(basePath, requestOptions);
 
     const [profilesResponse, userCountsResponse] = await Promise.all([
-      queryAll(basePath, [
-        'SELECT Id, Name, PermissionsApiEnabled, PermissionsModifyAllData,',
-        'PermissionsViewAllData, PermissionsCustomizeApplication, PermissionsManageUsers,',
-        'UserLicense.Name',
-        'FROM Profile',
-        'ORDER BY Name'
-      ].join(' ')),
+      queryAll(basePath, profileQuery, requestOptions),
       queryAll(basePath, [
         'SELECT ProfileId profileId, COUNT(Id) userCount',
         'FROM User',
         'WHERE IsActive = true',
         'GROUP BY ProfileId'
-      ].join(' '))
+      ].join(' '), requestOptions)
     ]);
+
+    const metadataResult = await loadProfileMetadataMap(orgContext, profilesResponse, { forceRefresh: forceMetadataRefresh }).catch((error) => {
+      console.warn('[SFSA] Profile metadata enrichment unavailable:', error);
+      return {
+        metadataByProfileName: new Map(),
+        source: 'fallback',
+        message: error.message,
+        cached: false
+      };
+    });
+    const metadataByProfileName = metadataResult.metadataByProfileName;
 
     const activeUserCounts = new Map(
       userCountsResponse.map((row) => [row.profileId, row.userCount || 0])
@@ -191,6 +269,11 @@
     const rows = profilesResponse.map((profile) => {
       const userCount = activeUserCounts.get(profile.Id) || 0;
       const severity = deriveProfileSeverity(profile);
+      const profileMetadata = metadataByProfileName.get(profile.Name) || null;
+      const mfaEnabled = Boolean(
+        profile.PermissionsMultiFactorAuthenticationForUserInterfaceLogins ||
+        profileMetadata?.mfaEnabled
+      );
 
       return {
         id: profile.Id,
@@ -203,9 +286,9 @@
         viewAllData: Boolean(profile.PermissionsViewAllData),
         customizeApplication: Boolean(profile.PermissionsCustomizeApplication),
         manageUsers: Boolean(profile.PermissionsManageUsers),
-        mfaStatus: 'Requires metadata/session policy audit',
-        sessionRestrictions: 'Requires metadata audit',
-        loginIpRestrictions: 'Requires metadata audit',
+        mfaStatus: mfaEnabled ? 'Enabled' : profileMetadata ? 'Not Enabled' : 'Unavailable',
+        sessionRestrictions: profileMetadata?.sessionRestrictions || 'Unavailable',
+        loginIpRestrictions: profileMetadata?.loginIpRestrictions || 'Unavailable',
         severity
       };
     });
@@ -217,9 +300,93 @@
         totalProfiles: rows.length,
         customProfiles: rows.filter((row) => row.profileType === 'Custom').length,
         highRiskProfiles: rows.filter((row) => row.severity === 'high').length,
-        apiEnabledProfiles: rows.filter((row) => row.apiEnabled).length
+        apiEnabledProfiles: rows.filter((row) => row.apiEnabled).length,
+        metadataEnrichedProfiles: rows.filter((row) => row.mfaStatus !== 'Unavailable' || row.sessionRestrictions !== 'Unavailable' || row.loginIpRestrictions !== 'Unavailable').length,
+        enrichmentSource: metadataResult.source,
+        enrichmentCached: metadataResult.cached,
+        enrichmentMessage: metadataResult.message
       },
       rows
+    };
+  }
+
+  async function buildProfileInventoryQuery(basePath, requestOptions) {
+    const preferredQuery = [
+      'SELECT Id, Name, PermissionsApiEnabled, PermissionsModifyAllData,',
+      'PermissionsViewAllData, PermissionsCustomizeApplication, PermissionsManageUsers,',
+      'PermissionsMultiFactorAuthenticationForUserInterfaceLogins,',
+      'UserLicense.Name',
+      'FROM Profile',
+      'ORDER BY Name'
+    ].join(' ');
+
+    try {
+      await queryOne(basePath, preferredQuery, requestOptions);
+      return preferredQuery;
+    } catch (error) {
+      if (!shouldFallbackProfileInventoryQuery(error)) {
+        throw error;
+      }
+
+      return [
+        'SELECT Id, Name, PermissionsApiEnabled, PermissionsModifyAllData,',
+        'PermissionsViewAllData, PermissionsCustomizeApplication, PermissionsManageUsers,',
+        'UserLicense.Name',
+        'FROM Profile',
+        'ORDER BY Name'
+      ].join(' ');
+    }
+  }
+
+  function shouldFallbackProfileInventoryQuery(error) {
+    const message = error?.message || '';
+
+    return /No such column|INVALID_FIELD|MALFORMED_QUERY|PermissionsMultiFactorAuthenticationForUserInterfaceLogins/i.test(message);
+  }
+
+  async function loadProfileMetadataMap(orgContext, profilesResponse, options = {}) {
+    const orgInfo = getMetadataOrgInfo(orgContext);
+    const forceRefresh = Boolean(options.forceRefresh);
+    const profileNames = profilesResponse.map((profile) => profile.Name).filter(Boolean);
+    const cacheKey = buildProfileMetadataCacheKey(orgInfo, profileNames);
+    const cachedEntry = metadataCache.profileMetadata.get(cacheKey);
+
+    if (!profileNames.length) {
+      return {
+        metadataByProfileName: new Map(),
+        source: 'empty',
+        cached: false,
+        message: 'No profile names available for metadata enrichment.'
+      };
+    }
+
+    if (!forceRefresh && cachedEntry && Date.now() - cachedEntry.createdAt < PROFILE_METADATA_CACHE_TTL_MS) {
+      return {
+        metadataByProfileName: cachedEntry.metadataByProfileName,
+        source: 'metadata-cache',
+        cached: true,
+        message: `Using cached metadata enrichment from ${new Date(cachedEntry.createdAt).toLocaleTimeString()}.`
+      };
+    }
+
+    const { SalesforceMetadataAPI } = await loadSalesforceHelpers();
+    const metadataApi = new SalesforceMetadataAPI(orgInfo);
+    const packageXml = buildProfilePackageXml(orgInfo.apiVersion, profileNames);
+    const retrieveId = await metadataApi.retrieve(packageXml);
+    const retrieveResult = await waitForMetadataRetrieve(metadataApi, retrieveId);
+    const profileXmlMap = await extractProfileMetadataFiles(retrieveResult.zipFile);
+    const metadataByProfileName = parseProfileMetadataMap(profileXmlMap);
+
+    metadataCache.profileMetadata.set(cacheKey, {
+      createdAt: Date.now(),
+      metadataByProfileName
+    });
+
+    return {
+      metadataByProfileName,
+      source: 'metadata-retrieve',
+      cached: false,
+      message: `Retrieved metadata for ${metadataByProfileName.size} profiles.`
     };
   }
 
@@ -227,12 +394,13 @@
     const orgContext = payload.orgContext || await resolveOrgContext();
     const apiVersion = orgContext.apiVersion;
     const basePath = `/services/data/v${apiVersion}`;
-    const permissionCatalog = getSystemPermissionCatalog();
+    const requestOptions = buildRestRequestOptions(orgContext);
+    const permissionCatalog = await resolveSupportedSystemPermissionCatalog(basePath, requestOptions, getSystemPermissionCatalog());
     const selectedFields = permissionCatalog.map((item) => item.field).join(', ');
 
     const [profilesResponse, permissionSetsResponse] = await Promise.all([
-      queryAll(basePath, `SELECT Id, Name, ${selectedFields} FROM Profile ORDER BY Name`),
-      queryAll(basePath, `SELECT Id, Label, Name, IsOwnedByProfile, ${selectedFields} FROM PermissionSet WHERE IsOwnedByProfile = false ORDER BY Label`)
+      queryAll(basePath, `SELECT Id, Name, ${selectedFields} FROM Profile ORDER BY Name`, requestOptions),
+      queryAll(basePath, `SELECT Id, Label, Name, IsOwnedByProfile, ${selectedFields} FROM PermissionSet WHERE IsOwnedByProfile = false ORDER BY Label`, requestOptions)
     ]);
 
     const rows = [
@@ -255,10 +423,43 @@
     };
   }
 
+  async function resolveSupportedSystemPermissionCatalog(basePath, requestOptions, permissionCatalog) {
+    const supportedCatalog = [];
+
+    for (const permission of permissionCatalog) {
+      if (await isSupportedSystemPermissionField(basePath, requestOptions, permission.field)) {
+        supportedCatalog.push(permission);
+      }
+    }
+
+    if (!supportedCatalog.length) {
+      throw new Error('No supported system permission fields were available for this org.');
+    }
+
+    return supportedCatalog;
+  }
+
+  async function isSupportedSystemPermissionField(basePath, requestOptions, fieldName) {
+    try {
+      await Promise.all([
+        queryOne(basePath, `SELECT Id, Name, ${fieldName} FROM Profile LIMIT 1`, requestOptions),
+        queryOne(basePath, `SELECT Id, Label, Name, IsOwnedByProfile, ${fieldName} FROM PermissionSet WHERE IsOwnedByProfile = false LIMIT 1`, requestOptions)
+      ]);
+      return true;
+    } catch (error) {
+      if (isUnsupportedSystemPermissionField(error, fieldName)) {
+        return false;
+      }
+
+      throw error;
+    }
+  }
+
   async function runObjectAccessAudit(payload) {
     const orgContext = payload.orgContext || await resolveOrgContext();
     const apiVersion = orgContext.apiVersion;
     const basePath = `/services/data/v${apiVersion}`;
+    const requestOptions = buildRestRequestOptions(orgContext);
     const objectPermissionFields = [
       'ParentId',
       'Parent.Name',
@@ -274,12 +475,12 @@
     ].join(', ');
 
     const [profileRows, permissionSetRows, groupComponents] = await Promise.all([
-      queryAll(basePath, `SELECT ${objectPermissionFields} FROM ObjectPermissions WHERE Parent.IsOwnedByProfile = true ORDER BY Parent.Name, SObjectType`),
-      queryAll(basePath, `SELECT ${objectPermissionFields} FROM ObjectPermissions WHERE Parent.IsOwnedByProfile = false ORDER BY Parent.Label, SObjectType`),
+      queryAll(basePath, `SELECT ${objectPermissionFields} FROM ObjectPermissions WHERE Parent.IsOwnedByProfile = true ORDER BY Parent.Name, SObjectType`, requestOptions),
+      queryAll(basePath, `SELECT ${objectPermissionFields} FROM ObjectPermissions WHERE Parent.IsOwnedByProfile = false ORDER BY Parent.Label, SObjectType`, requestOptions),
       queryAll(basePath, [
         'SELECT PermissionSetGroupId, PermissionSetId, PermissionSetGroup.MasterLabel',
         'FROM PermissionSetGroupComponent'
-      ].join(' '))
+      ].join(' '), requestOptions)
     ]);
 
     const permissionSetAccessRows = permissionSetRows.map((row) => buildObjectAccessRow('Permission Set', row.Parent?.Label || row.Parent?.Name || 'Unknown', row));
@@ -304,7 +505,23 @@
 
   async function runMetadataInventoryAudit(payload) {
     const orgContext = payload.orgContext || await resolveOrgContext();
+    const forceMetadataRefresh = Boolean(payload.forceMetadataRefresh);
     const orgInfo = getMetadataOrgInfo(orgContext);
+    const cacheKey = buildMetadataInventoryCacheKey(orgInfo);
+    const cachedEntry = metadataCache.inventory.get(cacheKey);
+
+    if (!forceMetadataRefresh && cachedEntry && Date.now() - cachedEntry.createdAt < METADATA_INVENTORY_CACHE_TTL_MS) {
+      return {
+        ...cachedEntry.result,
+        generatedAt: new Date().toISOString(),
+        summary: {
+          ...cachedEntry.result.summary,
+          inventorySource: 'metadata-cache',
+          inventoryMessage: `Using cached metadata inventory from ${new Date(cachedEntry.createdAt).toLocaleTimeString()}.`
+        }
+      };
+    }
+
     const { SalesforceMetadataAPI, SalesforceMembers } = await loadSalesforceHelpers();
     const metadataApi = new SalesforceMetadataAPI(orgInfo);
     const membersClient = new SalesforceMembers({
@@ -323,7 +540,7 @@
       membersClient.getMembers('PermissionSet')
     ]);
 
-    return {
+    const result = {
       orgContext,
       generatedAt: new Date().toISOString(),
       summary: {
@@ -331,28 +548,37 @@
         apexClasses: apexClasses.length,
         customObjects: customObjects.length,
         profiles: profiles.length,
-        permissionSets: permissionSets.length
+        permissionSets: permissionSets.length,
+        inventorySource: 'metadata-retrieve',
+        inventoryMessage: `Retrieved ${metadataTypes.length} metadata types and core member counts.`
       },
       metadataTypes: metadataTypes.slice(0, 50)
     };
+
+    metadataCache.inventory.set(cacheKey, {
+      createdAt: Date.now(),
+      result
+    });
+
+    return result;
   }
 
-  async function queryOne(basePath, soql) {
-    const response = await fetchJson(`${basePath}/query?q=${encodeURIComponent(soql)}`);
+  async function queryOne(basePath, soql, requestOptions) {
+    const response = await fetchJson(`${basePath}/query?q=${encodeURIComponent(soql)}`, requestOptions);
     return response.records?.[0] || null;
   }
 
-  async function countQuery(basePath, soql) {
-    const response = await fetchJson(`${basePath}/query?q=${encodeURIComponent(soql)}`);
+  async function countQuery(basePath, soql, requestOptions) {
+    const response = await fetchJson(`${basePath}/query?q=${encodeURIComponent(soql)}`, requestOptions);
     return response.totalSize || 0;
   }
 
-  async function queryAll(basePath, soql) {
+  async function queryAll(basePath, soql, requestOptions) {
     const records = [];
     let nextPath = `${basePath}/query?q=${encodeURIComponent(soql)}`;
 
     while (nextPath) {
-      const response = await fetchJson(nextPath);
+      const response = await fetchJson(nextPath, requestOptions);
       records.push(...(response.records || []));
       nextPath = response.nextRecordsUrl || null;
     }
@@ -361,11 +587,12 @@
   }
 
   async function fetchJson(path, options = {}) {
-    const response = await fetch(`${window.location.origin}${path}`, {
+    const response = await fetch(buildRestUrl(path, options.instanceUrl), {
       method: options.method || 'GET',
       credentials: 'include',
       headers: {
         Accept: 'application/json',
+        ...(options.sessionId ? { Authorization: `Bearer ${options.sessionId}` } : {}),
         ...(options.headers || {})
       },
       body: options.body
@@ -373,10 +600,35 @@
 
     if (!response.ok) {
       const message = await response.text();
-      throw new Error(`Salesforce request failed (${response.status}): ${message.slice(0, 180)}`);
+      throw new Error(formatSalesforceRequestError(response.status, message));
     }
 
     return response.json();
+  }
+
+  function buildRestRequestOptions(orgContext) {
+    return {
+      instanceUrl: orgContext.instanceUrl || orgContext.orgUrl || window.location.origin,
+      sessionId: orgContext.sessionId || null
+    };
+  }
+
+  function buildRestUrl(path, instanceUrl) {
+    if (/^https?:\/\//i.test(path)) {
+      return path;
+    }
+
+    return `${instanceUrl || window.location.origin}${path}`;
+  }
+
+  function formatSalesforceRequestError(status, message) {
+    const snippet = message.slice(0, 180);
+
+    if (status === 401 && /INVALID_SESSION_ID|Session expired or invalid/i.test(message)) {
+      return `Salesforce request failed (${status}): session expired or invalid. Reconnect to an active Salesforce tab and try again.`;
+    }
+
+    return `Salesforce request failed (${status}): ${snippet}`;
   }
 
   function buildInitialRisk(overview, signals) {
@@ -506,6 +758,11 @@
         recommendation: 'Restrict decrypted data visibility to approved business-critical roles.'
       }
     ];
+  }
+
+  function isUnsupportedSystemPermissionField(error, fieldName) {
+    const message = error?.message || '';
+    return message.includes(fieldName) || /INVALID_FIELD|MALFORMED_QUERY|No such column/i.test(message);
   }
 
   function buildPermissionRows(principalType, principals, permissionCatalog, options = {}) {
@@ -647,16 +904,156 @@
     };
   }
 
+  async function loadZipLibrary() {
+    if (globalThis.JSZip?.loadAsync) {
+      return globalThis.JSZip;
+    }
+
+    await import(chrome.runtime.getURL('src/lib/jszip.min.js'));
+
+    if (!globalThis.JSZip?.loadAsync) {
+      throw new Error('JSZip could not be loaded for metadata parsing.');
+    }
+
+    return globalThis.JSZip;
+  }
+
   function getMetadataOrgInfo(orgContext) {
     if (!orgContext.sessionId) {
       throw new Error('Salesforce session cookie not available for metadata APIs. Reopen the app from an authenticated Salesforce tab.');
     }
 
     return {
-      url: orgContext.orgUrl,
+      url: orgContext.instanceUrl || orgContext.orgUrl,
       instanceUrl: orgContext.instanceUrl || orgContext.orgUrl,
       sessionId: orgContext.sessionId,
       apiVersion: orgContext.apiVersion
     };
+  }
+
+  function buildProfilePackageXml(apiVersion, profileNames) {
+    const profileMembers = profileNames.map((name) => `    <members>${escapeXml(name)}</members>`).join('\n');
+
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+  <types>
+${profileMembers}
+    <name>Profile</name>
+  </types>
+  <version>${apiVersion}</version>
+</Package>`;
+  }
+
+  function buildProfileMetadataCacheKey(orgInfo, profileNames) {
+    return [
+      orgInfo.instanceUrl,
+      orgInfo.apiVersion,
+      ...profileNames.slice().sort()
+    ].join('|');
+  }
+
+  function buildMetadataInventoryCacheKey(orgInfo) {
+    return [orgInfo.instanceUrl, orgInfo.apiVersion, 'metadata-inventory'].join('|');
+  }
+
+  async function waitForMetadataRetrieve(metadataApi, retrieveId) {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const status = await metadataApi.checkRetrieveStatus(retrieveId);
+
+      if (status.done && status.success && status.zipFile) {
+        return status;
+      }
+
+      if (status.done && !status.success) {
+        throw new Error(status.errorMessage || `Metadata retrieve failed with state ${status.state}.`);
+      }
+
+      await delay(750);
+    }
+
+    throw new Error('Timed out waiting for profile metadata retrieve.');
+  }
+
+  async function extractProfileMetadataFiles(base64Zip) {
+    const JSZip = await loadZipLibrary();
+    const zip = await JSZip.loadAsync(base64Zip, { base64: true });
+    const profileEntries = zip.file(/profiles\/.*\.profile-meta\.xml$/i);
+    const results = new Map();
+
+    for (const entry of profileEntries) {
+      const text = await entry.async('string');
+      const profileName = entry.name.split('/').pop().replace(/\.profile-meta\.xml$/i, '');
+      results.set(profileName, text);
+    }
+
+    return results;
+  }
+
+  function parseProfileMetadataMap(profileXmlMap) {
+    const metadataMap = new Map();
+
+    for (const [profileName, xmlText] of profileXmlMap.entries()) {
+      const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+      metadataMap.set(profileName, {
+        mfaEnabled: hasProfileUserPermission(doc, 'MultiFactorAuthenticationForUserInterfaceLogins'),
+        sessionRestrictions: extractSessionRestrictions(doc),
+        loginIpRestrictions: extractLoginIpRestrictions(doc)
+      });
+    }
+
+    return metadataMap;
+  }
+
+  function hasProfileUserPermission(doc, permissionName) {
+    const userPermissions = Array.from(doc.getElementsByTagName('userPermissions'));
+
+    return userPermissions.some((node) => {
+      const name = node.getElementsByTagName('name')[0]?.textContent || '';
+      const enabled = node.getElementsByTagName('enabled')[0]?.textContent || 'false';
+      return name === permissionName && enabled === 'true';
+    });
+  }
+
+  function extractSessionRestrictions(doc) {
+    const sessionTimeout = doc.getElementsByTagName('sessionTimeout')[0]?.textContent || null;
+    const sessionWarning = doc.getElementsByTagName('sessionTimeoutWarning')[0]?.textContent || null;
+
+    if (!sessionTimeout && !sessionWarning) {
+      return 'Default / Not Defined';
+    }
+
+    return [
+      sessionTimeout ? `Timeout: ${sessionTimeout}` : null,
+      sessionWarning ? `Warning: ${sessionWarning}` : null
+    ].filter(Boolean).join(' | ');
+  }
+
+  function extractLoginIpRestrictions(doc) {
+    const ranges = Array.from(doc.getElementsByTagName('loginIpRanges'));
+
+    if (!ranges.length) {
+      return 'None Defined';
+    }
+
+    if (ranges.length === 1) {
+      const start = ranges[0].getElementsByTagName('startAddress')[0]?.textContent || '?';
+      const end = ranges[0].getElementsByTagName('endAddress')[0]?.textContent || '?';
+      return `${start} - ${end}`;
+    }
+
+    return `${ranges.length} ranges defined`;
+  }
+
+  function escapeXml(value) {
+    return String(value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&apos;');
+  }
+
+  function delay(milliseconds) {
+    return new Promise((resolve) => setTimeout(resolve, milliseconds));
   }
 })();

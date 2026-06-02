@@ -10,11 +10,6 @@
     "scripting",
     "storage"
   ],
-  "host_permissions": [
-    "https://*.salesforce.com/*",
-    "https://*.force.com/*",
-    "https://*.site.com/*"
-  ],
   "background": {
     "service_worker": "src/background/service-worker.js",
     "type": "module"
@@ -28,9 +23,15 @@
         "https://*.salesforce.com/*",
         "https://*.lightning.force.com/*",
         "https://*.my.salesforce.com/*",
-        "https://*.visual.force.com/*"
+        "https://*.visual.force.com/*",
+        "https://*.force.com/*",
+        "https://*.salesforce-setup.com/*",
+        "https://*.my.salesforce-setup.com/*",
+        "https://login.salesforce.com/*",
+        "https://test.salesforce.com/*"
       ],
       "js": [
+        "src/lib/jszip.min.js",
         "src/content/content-script.js"
       ],
       "run_at": "document_idle"
@@ -40,13 +41,21 @@
     {
       "resources": [
         "src/content/page-bridge.js",
-        "src/salesforce-scripts/org-detector.js"
+        "src/salesforce-scripts/org-detector.js",
+        "src/lib/jszip.min.js",
+        "src/salesforce-scripts/salesforce-api.js",
+        "src/salesforce-scripts/salesforce-members.js"
       ],
       "matches": [
         "https://*.salesforce.com/*",
         "https://*.lightning.force.com/*",
         "https://*.my.salesforce.com/*",
-        "https://*.visual.force.com/*"
+        "https://*.visual.force.com/*",
+        "https://*.force.com/*",
+        "https://*.salesforce-setup.com/*",
+        "https://*.my.salesforce-setup.com/*",
+        "https://login.salesforce.com/*",
+        "https://test.salesforce.com/*"
       ]
     }
   ],

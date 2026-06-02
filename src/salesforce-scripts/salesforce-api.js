@@ -29,7 +29,7 @@ export class SalesforceMetadataAPI {
    */
   constructor(orgInfo) {
     this.orgInfo = orgInfo;
-    this.baseUrl = this.normalizeOrgUrl(orgInfo.url);
+    this.baseUrl = this.normalizeOrgUrl(orgInfo.instanceUrl || orgInfo.url);
     this.sessionId = orgInfo.sessionId;
     this.apiVersion = orgInfo.apiVersion || '59.0';
     

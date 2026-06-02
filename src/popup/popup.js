@@ -141,7 +141,10 @@ function isSalesforceUrl(url) {
 }
 
 function escapeHtml(value) {
-  return value
+  if (value == null) {
+    return '';
+  }
+  return String(value)
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')

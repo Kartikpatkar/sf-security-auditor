@@ -30,8 +30,14 @@
             <button id="run-system-permissions-button" class="secondary-button" type="button">Run System Permissions</button>
             <button id="run-object-access-button" class="secondary-button" type="button">Run Object Access</button>
             <button id="run-metadata-inventory-button" class="secondary-button" type="button">Run Metadata Inventory</button>
+            <button id="export-workbook-button" class="ghost-button" type="button">Export Audit Workbook</button>
             <button id="use-current-tab-button" class="ghost-button" type="button">Use Current Salesforce Tab</button>
           </div>
+        </section>
+
+        <section class="sidebar-card">
+          <p class="section-label">Export</p>
+          <p id="export-status" class="support-copy">Run at least one audit module to enable workbook export.</p>
         </section>
 
         <section class="sidebar-card">
@@ -68,6 +74,7 @@
               <p class="eyebrow">Overview</p>
               <h2>Org Security Workspace</h2>
               <p class="support-copy">This baseline app detects the active Salesforce org and runs an initial overview audit without exporting data outside the browser.</p>
+              <p id="overview-last-run" class="support-copy">Overview audit has not run yet.</p>
             </div>
             <div class="metrics-row">
               <article class="metric-card accent-card">
@@ -132,7 +139,9 @@
             <div>
               <p class="eyebrow">Profile Inventory</p>
               <h2>Profile Access Baseline</h2>
-              <p class="support-copy">This first audit module inventories profile-level access and user counts. MFA, session restrictions, and login IP restrictions are marked for later metadata-backed enrichment.</p>
+              <p class="support-copy">This audit module inventories profile-level access and user counts, then enriches MFA, session timeout, and login IP restriction signals from profile metadata.</p>
+              <p id="profiles-enrichment-status" class="support-copy">Metadata enrichment has not run yet.</p>
+              <p id="profiles-last-run" class="support-copy">Profile inventory has not run yet.</p>
             </div>
             <div class="metrics-row compact-metrics-row">
               <article class="metric-card accent-card">
@@ -144,8 +153,8 @@
                 <strong id="profiles-custom">-</strong>
               </article>
               <article class="metric-card">
-                <span class="metric-label">API Enabled</span>
-                <strong id="profiles-api-enabled">-</strong>
+                <span class="metric-label">Metadata Source</span>
+                <strong id="profiles-enrichment-source">-</strong>
               </article>
               <article class="metric-card score-card">
                 <span class="metric-label">High Risk</span>
@@ -157,7 +166,44 @@
           <section class="panel-card">
             <div class="panel-heading">
               <p class="section-label">Profile Rows</p>
-              <span id="profile-row-count" class="badge badge-strong">0</span>
+              <div class="panel-heading-actions">
+                <button id="refresh-profile-metadata-button" class="ghost-button" type="button">Refresh metadata</button>
+                <span id="profile-row-count" class="badge badge-strong">0</span>
+              </div>
+            </div>
+            <div class="profile-controls" aria-label="Profile table controls">
+              <label class="control-field">
+                <span class="control-label">Search</span>
+                <input id="profile-search-input" class="control-input" type="search" placeholder="Profile, license, MFA, IP restrictions" />
+              </label>
+              <label class="control-field">
+                <span class="control-label">Severity</span>
+                <select id="profile-severity-filter" class="control-input">
+                  <option value="all">All severities</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </label>
+              <label class="control-field">
+                <span class="control-label">Metadata</span>
+                <select id="profile-enrichment-filter" class="control-input">
+                  <option value="all">All rows</option>
+                  <option value="enriched">Metadata enriched</option>
+                  <option value="missing">Metadata unavailable</option>
+                </select>
+              </label>
+              <label class="control-field">
+                <span class="control-label">Sort</span>
+                <select id="profile-sort-select" class="control-input">
+                  <option value="severity-desc">Severity: High to Low</option>
+                  <option value="users-desc">Users: High to Low</option>
+                  <option value="users-asc">Users: Low to High</option>
+                  <option value="name-asc">Name: A to Z</option>
+                  <option value="name-desc">Name: Z to A</option>
+                  <option value="license-asc">License: A to Z</option>
+                </select>
+              </label>
             </div>
             <div class="table-shell">
               <table class="audit-table">
@@ -172,12 +218,15 @@
                     <th>View All Data</th>
                     <th>Customize App</th>
                     <th>Manage Users</th>
+                    <th>MFA</th>
+                    <th>Session Restrictions</th>
+                    <th>Login IP Restrictions</th>
                     <th>Severity</th>
                   </tr>
                 </thead>
                 <tbody id="profile-table-body">
                   <tr>
-                    <td colspan="10" class="empty-state table-empty-state">Run profile inventory to load rows.</td>
+                    <td colspan="13" class="empty-state table-empty-state">Run profile inventory to load rows.</td>
                   </tr>
                 </tbody>
               </table>
@@ -191,6 +240,7 @@
               <p class="eyebrow">System Permissions</p>
               <h2>System Permissions Matrix</h2>
               <p class="support-copy">This module highlights high-value system permissions across profiles and permission sets, with severity and recommendations for review.</p>
+              <p id="permissions-last-run" class="support-copy">System permissions audit has not run yet.</p>
             </div>
             <div class="metrics-row compact-metrics-row">
               <article class="metric-card accent-card">
@@ -245,6 +295,7 @@
               <p class="eyebrow">Object Access</p>
               <h2>Object Access Matrix</h2>
               <p class="support-copy">This module inventories object-level access across profiles, permission sets, and aggregated permission set groups for standard, custom, and managed-package objects.</p>
+              <p id="object-access-last-run" class="support-copy">Object access audit has not run yet.</p>
             </div>
             <div class="metrics-row compact-metrics-row">
               <article class="metric-card accent-card">
@@ -304,6 +355,8 @@
               <p class="eyebrow">Metadata Inventory</p>
               <h2>Metadata Surface Snapshot</h2>
               <p class="support-copy">This section uses your previous-project Salesforce metadata helpers to inspect metadata types and count core metadata members in the current org.</p>
+              <p id="metadata-inventory-status" class="support-copy">Metadata inventory has not run yet.</p>
+              <p id="metadata-last-run" class="support-copy">Metadata inventory has not run yet.</p>
             </div>
             <div class="metrics-row compact-metrics-row">
               <article class="metric-card accent-card">
@@ -319,8 +372,8 @@
                 <strong id="metadata-custom-object-count">-</strong>
               </article>
               <article class="metric-card score-card">
-                <span class="metric-label">Permission Sets</span>
-                <strong id="metadata-permission-set-count">-</strong>
+                <span class="metric-label">Metadata Source</span>
+                <strong id="metadata-source">-</strong>
               </article>
             </div>
           </section>
@@ -328,7 +381,10 @@
           <section class="panel-card">
             <div class="panel-heading">
               <p class="section-label">Metadata Types</p>
-              <span id="metadata-row-count" class="badge badge-strong">0</span>
+              <div class="panel-heading-actions">
+                <button id="refresh-metadata-inventory-button" class="ghost-button" type="button">Refresh inventory</button>
+                <span id="metadata-row-count" class="badge badge-strong">0</span>
+              </div>
             </div>
             <div class="table-shell">
               <table class="audit-table">
@@ -353,6 +409,7 @@
       </main>
     </div>
 
+    <script src="../lib/exceljs.min.js"></script>
     <script type="module" src="./app.js"></script>
   </body>
 </html>

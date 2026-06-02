@@ -97,9 +97,6 @@ export class OrgDetector {
    * @returns {Promise<string>} 15 or 18 character org ID
    */
   async extractOrgId() {
-    // TODO: Implement org ID extraction
-    // This is complex and varies by Salesforce UI type
-    
     // Strategy 1: Check meta tags
     const metaOrgId = this.getMetaOrgId();
     if (metaOrgId) {
@@ -112,12 +109,37 @@ export class OrgDetector {
       return auraOrgId;
     }
     
-    // Strategy 3: Try to extract from API calls (complex)
-    // This would require monitoring network requests
+    // Strategy 3: Check runtime globals
+    const globalOrgId = this.getGlobalOrgId();
+    if (globalOrgId) {
+      return globalOrgId;
+    }
     
     // Fallback: Return placeholder
     console.warn('[Org Detector] Could not extract org ID, using placeholder');
     return '00D000000000000EAA'; // 15-char placeholder
+  }
+  
+  /**
+   * Extract org ID from window runtime globals
+   * @returns {string|null} Org ID or null
+   */
+  getGlobalOrgId() {
+    if (typeof window !== 'undefined') {
+      if (window.UserContext?.orgId) {
+        return window.UserContext.orgId;
+      }
+      if (window.sforce?.connection?.orgId) {
+        return window.sforce.connection.orgId;
+      }
+      if (window.Aura?.context?.orgId) {
+        return window.Aura.context.orgId;
+      }
+      if (window.$A?.getContext()?.orgId) {
+        return window.$A.getContext().orgId;
+      }
+    }
+    return null;
   }
   
   /**
@@ -151,14 +173,13 @@ export class OrgDetector {
    * 
    * STRATEGIES:
    * 1. Check page source for API version references
-   * 2. Use latest known version as fallback
+   * 2. Check Aura config
+   * 3. Check page globals (UserContext)
+   * 4. Use latest known version as fallback
    * 
    * @returns {string} API version (e.g., "59.0")
    */
   extractApiVersion() {
-    // TODO: Implement API version detection
-    // Look for version in page source, scripts, or API calls
-    
     // Strategy 1: Check for API version in scripts
     const scripts = document.querySelectorAll('script[src*="/resource/"]');
     for (const script of scripts) {
@@ -179,6 +200,11 @@ export class OrgDetector {
       } catch (e) {
         console.warn('[Org Detector] Failed to parse Aura config for API version:', e);
       }
+    }
+    
+    // Strategy 3: Check runtime globals
+    if (typeof window !== 'undefined' && window.UserContext?.apiVersion) {
+      return String(window.UserContext.apiVersion);
     }
     
     // Fallback: Use default version

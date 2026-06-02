@@ -13,11 +13,12 @@ The repository now contains the first development scaffold for the MVP:
 - Full-page extension app for org detection and overview audit
 - Multi-section dashboard with Overview, Profiles, Permissions, Object Access, and Metadata sections
 - Same-origin Salesforce API access from the active tab using browser session cookies
+- Styled Excel workbook export for all loaded audit modules from the full-page app, including per-sheet summary metadata such as refresh time, source, and key counts
 - Initial overview audit for org name, instance, users, profiles, permission sets, and guest-user signal
-- First real audit module: profile inventory with active-user counts and profile-level permission flags
+- First real audit module: profile inventory with active-user counts, profile-level permission flags, visible MFA/session/login IP enrichment columns, metadata source/refresh status, and client-side filtering/sorting controls
 - System permissions matrix for profiles and permission sets with severity, categories, and recommendations
 - Object access matrix for profiles, permission sets, and aggregated permission set groups
-- Metadata inventory powered by the reused `OrgDetector`, `SalesforceMetadataAPI`, and `SalesforceMembers` helpers
+- Metadata inventory powered by the reused `OrgDetector`, `SalesforceMetadataAPI`, and `SalesforceMembers` helpers, with cache-aware refresh controls in the dashboard
 
 ## Why This Architecture
 
@@ -49,10 +50,11 @@ src/
 3. The extension opens a dedicated full-page app tab.
 4. Detect org context.
 5. Run the overview audit.
-6. Run profile inventory from the Profiles section.
+6. Run profile inventory from the Profiles section, then use search, severity, metadata, and sort controls to narrow the table or refresh metadata when you need a fresh retrieve.
 7. Run system permissions from the Permissions section.
 8. Run object access from the Object Access section.
-9. Run metadata inventory from the Metadata section.
+9. Run metadata inventory from the Metadata section and use Refresh inventory to bypass cached results.
+10. Export any loaded modules as a single `.xlsx` workbook from the sidebar export action, with summary rows above each module table.
 
 ## Supported Salesforce Origins
 
@@ -70,10 +72,12 @@ The extension currently targets these Salesforce surfaces:
 
 ## Development
 
+This extension is lightweight, offline-first, and contains no external Node dependencies. All required libraries are stored locally in the `src/lib/` folder.
+
 Validate the current scaffold:
 
 ```bash
-npm run validate
+node scripts/validate.mjs
 ```
 
 Load the extension in Chrome:
@@ -85,7 +89,7 @@ Load the extension in Chrome:
 
 ## MVP Next Steps
 
-- Add export pipeline for Excel workbooks
-- Enrich profile inventory with Metadata API-backed MFA, session restrictions, and login IP restrictions
 - Expand the risk engine beyond initial guest-user, profile-level, and system-permission signals
 - Refine permission set group object access with muting-aware aggregation if needed
+- Add export preferences such as workbook naming, selected sheets, and save-as behavior
+- Expand metadata-backed enrichment to other controls beyond profiles
