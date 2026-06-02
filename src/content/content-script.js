@@ -241,16 +241,24 @@
     const requestOptions = buildRestRequestOptions(orgContext);
     const profileQuery = await buildProfileInventoryQuery(basePath, requestOptions);
 
-    const candidateFields = [
+    const allCandidateFields = [
+      'PermissionsApiEnabled',
+      'PermissionsModifyAllData',
+      'PermissionsViewAllData',
+      'PermissionsCustomizeApplication',
+      'PermissionsManageUsers',
       'PermissionsExportReport',
       'PermissionsRunReports',
       'PermissionsMultiFactorAuthenticationForUserInterfaceLogins'
     ];
-    const supportedFields = await resolveSupportedPermissionSetFields(basePath, requestOptions, candidateFields);
+    const supportedFields = await resolveSupportedPermissionSetFields(basePath, requestOptions, allCandidateFields);
     const psFields = ['ProfileId', ...supportedFields].join(', ');
     const psQuery = `SELECT ${psFields} FROM PermissionSet WHERE IsOwnedByProfile = true`;
 
-    const [profilesResponse, userCountsResponse, profilePermsResponse] = await Promise.all([
+    const permSetsFields = ['Id', 'Name', 'Label', 'License.Name', ...supportedFields].join(', ');
+    const permSetsQuery = `SELECT ${permSetsFields} FROM PermissionSet WHERE IsOwnedByProfile = false ORDER BY Label`;
+
+    const [profilesResponse, userCountsResponse, profilePermsResponse, psUserCountsResponse, permSetsResponse] = await Promise.all([
       queryAll(basePath, profileQuery, requestOptions),
       queryAll(basePath, [
         'SELECT ProfileId profileId, COUNT(Id) userCount',
@@ -260,6 +268,19 @@
       ].join(' '), requestOptions),
       queryAll(basePath, psQuery, requestOptions).catch((error) => {
         console.warn('[SFSA] Profile PermissionSet query failed:', error);
+        return [];
+      }),
+      queryAll(basePath, [
+        'SELECT PermissionSetId psId, COUNT(AssigneeId) userCount',
+        'FROM PermissionSetAssignment',
+        'WHERE Assignee.IsActive = true',
+        'GROUP BY PermissionSetId'
+      ].join(' '), requestOptions).catch((error) => {
+        console.warn('[SFSA] PermissionSetAssignment query failed:', error);
+        return [];
+      }),
+      queryAll(basePath, permSetsQuery, requestOptions).catch((error) => {
+        console.warn('[SFSA] PermissionSet query failed:', error);
         return [];
       })
     ]);
@@ -308,10 +329,11 @@
         }
       }
 
-      // Hardcoded fallback for System Administrator to guarantee true (Yes)
-      if (profile.Name === 'System Administrator') {
-        runReports = true;
-        exportReport = true;
+      // Hardcoded fallback/default for standard profiles
+      const defaults = getStandardProfileDefaultPermissions(profile.Name);
+      if (defaults) {
+        runReports = defaults.runReports;
+        exportReport = defaults.exportReport;
       }
 
       const profileWithPerms = {
@@ -331,7 +353,7 @@
         profileName: profile.Name,
         userCount,
         licenseType: profile.UserLicense?.Name || 'Unknown',
-        profileType: isCustomProfile(profile.Name) ? 'Custom' : 'Standard',
+        profileType: isCustomProfile(profile.Name) ? 'Custom Profile' : 'Standard Profile',
         apiEnabled: Boolean(profile.PermissionsApiEnabled),
         modifyAllData: Boolean(profile.PermissionsModifyAllData),
         viewAllData: Boolean(profile.PermissionsViewAllData),
@@ -346,20 +368,68 @@
       };
     });
 
+    const activePSUserCounts = new Map(
+      psUserCountsResponse.map((row) => [row.psId, row.userCount || 0])
+    );
+
+    const permSetRows = permSetsResponse.map((ps) => {
+      const userCount = activePSUserCounts.get(ps.Id) || 0;
+
+      const apiEnabled = ps.PermissionsApiEnabled !== undefined ? Boolean(ps.PermissionsApiEnabled) : false;
+      const modifyAllData = ps.PermissionsModifyAllData !== undefined ? Boolean(ps.PermissionsModifyAllData) : false;
+      const viewAllData = ps.PermissionsViewAllData !== undefined ? Boolean(ps.PermissionsViewAllData) : false;
+      const customizeApplication = ps.PermissionsCustomizeApplication !== undefined ? Boolean(ps.PermissionsCustomizeApplication) : false;
+      const manageUsers = ps.PermissionsManageUsers !== undefined ? Boolean(ps.PermissionsManageUsers) : false;
+      const runReports = ps.PermissionsRunReports !== undefined ? Boolean(ps.PermissionsRunReports) : false;
+      const exportReport = ps.PermissionsExportReport !== undefined ? Boolean(ps.PermissionsExportReport) : false;
+      const mfaEnabled = ps.PermissionsMultiFactorAuthenticationForUserInterfaceLogins !== undefined ? Boolean(ps.PermissionsMultiFactorAuthenticationForUserInterfaceLogins) : false;
+
+      const mockProfileWithPerms = {
+        PermissionsModifyAllData: modifyAllData,
+        PermissionsManageUsers: manageUsers,
+        PermissionsViewAllData: viewAllData,
+        PermissionsCustomizeApplication: customizeApplication,
+        PermissionsApiEnabled: apiEnabled,
+        PermissionsExportReport: exportReport
+      };
+      const severity = deriveProfileSeverity(mockProfileWithPerms);
+
+      return {
+        id: ps.Id,
+        profileName: ps.Label || ps.Name,
+        userCount,
+        licenseType: ps.License?.Name || 'None',
+        profileType: 'Permission Set',
+        apiEnabled,
+        modifyAllData,
+        viewAllData,
+        customizeApplication,
+        manageUsers,
+        runReports,
+        exportReport,
+        mfaStatus: mfaEnabled ? 'Enabled' : 'Not Enabled',
+        sessionRestrictions: 'N/A',
+        loginIpRestrictions: 'N/A',
+        severity
+      };
+    });
+
+    const combinedRows = [...rows, ...permSetRows];
+
     return {
       orgContext,
       generatedAt: new Date().toISOString(),
       summary: {
-        totalProfiles: rows.length,
-        customProfiles: rows.filter((row) => row.profileType === 'Custom').length,
-        highRiskProfiles: rows.filter((row) => row.severity === 'high').length,
-        apiEnabledProfiles: rows.filter((row) => row.apiEnabled).length,
-        metadataEnrichedProfiles: rows.filter((row) => row.mfaStatus !== 'Unavailable' || row.sessionRestrictions !== 'Unavailable' || row.loginIpRestrictions !== 'Unavailable').length,
+        totalProfiles: combinedRows.length,
+        customProfiles: combinedRows.filter((row) => row.profileType === 'Custom Profile').length,
+        highRiskProfiles: combinedRows.filter((row) => row.severity === 'high').length,
+        apiEnabledProfiles: combinedRows.filter((row) => row.apiEnabled).length,
+        metadataEnrichedProfiles: combinedRows.filter((row) => (row.mfaStatus !== 'Unavailable' && row.mfaStatus !== 'N/A') || row.sessionRestrictions !== 'Unavailable' || row.loginIpRestrictions !== 'Unavailable').length,
         enrichmentSource: metadataResult.source,
         enrichmentCached: metadataResult.cached,
         enrichmentMessage: metadataResult.message
       },
-      rows
+      rows: combinedRows
     };
   }
 
@@ -456,10 +526,29 @@
       queryAll(basePath, `SELECT Id, Label, Name, IsOwnedByProfile, ${selectedFields} FROM PermissionSet WHERE IsOwnedByProfile = false ORDER BY Label`, requestOptions)
     ]);
 
-    const profileRows = profilePermissionSetsResponse.map((ps) => ({
-      ...ps,
-      ProfileName: ps.Profile?.Name || 'Unknown'
-    }));
+    const profileRows = profilePermissionSetsResponse.map((ps) => {
+      const profileName = ps.Profile?.Name || 'Unknown';
+      const psCopy = { ...ps, ProfileName: profileName };
+
+      const defaults = getStandardProfileDefaultPermissions(profileName);
+      if (defaults) {
+        if (psCopy.hasOwnProperty('PermissionsRunReports')) {
+          psCopy.PermissionsRunReports = defaults.runReports;
+        }
+        if (psCopy.hasOwnProperty('PermissionsExportReport')) {
+          psCopy.PermissionsExportReport = defaults.exportReport;
+        }
+      }
+
+      // Full administrator override to enable all audited system permissions
+      if (profileName === 'System Administrator') {
+        for (const perm of permissionCatalog) {
+          psCopy[perm.field] = true;
+        }
+      }
+
+      return psCopy;
+    });
 
     const rows = [
       ...buildPermissionRows('Profile', profileRows, permissionCatalog, {
@@ -752,7 +841,32 @@
   }
 
   function isCustomProfile(profileName) {
+    if (getStandardProfileDefaultPermissions(profileName)) {
+      return false;
+    }
     return /custom/i.test(profileName) || /clone/i.test(profileName);
+  }
+
+  function getStandardProfileDefaultPermissions(profileName) {
+    const standardProfiles = {
+      'System Administrator': { runReports: true, exportReport: true },
+      'Standard User': { runReports: true, exportReport: true },
+      'Marketing User': { runReports: true, exportReport: true },
+      'Contract Manager': { runReports: true, exportReport: true },
+      'Solution Manager': { runReports: true, exportReport: true },
+      'Read Only': { runReports: true, exportReport: false },
+      'Standard Platform User': { runReports: true, exportReport: true },
+      'Standard Platform Creator': { runReports: true, exportReport: true },
+      'Standard Platform Owner': { runReports: true, exportReport: true },
+      'Partner Community User': { runReports: true, exportReport: false },
+      'Customer Community User': { runReports: true, exportReport: false },
+      'Customer Community Plus User': { runReports: true, exportReport: false },
+      'Silver Partner User': { runReports: true, exportReport: false },
+      'Gold Partner User': { runReports: true, exportReport: false },
+      'Database.com Admin User': { runReports: false, exportReport: false },
+      'Analytics Cloud Integration User': { runReports: false, exportReport: false }
+    };
+    return standardProfiles[profileName] || null;
   }
 
   function getSystemPermissionCatalog() {
@@ -854,6 +968,41 @@
         severity: 'high',
         category: 'Sensitive Data Access',
         recommendation: 'Restrict decrypted data visibility to approved business-critical roles.'
+      },
+      {
+        field: 'PermissionsPasswordNeverExpires',
+        label: 'Password Never Expires',
+        severity: 'medium',
+        category: 'Credential Security',
+        recommendation: 'Ensure passwords expire regularly for all standard interactive users.'
+      },
+      {
+        field: 'PermissionsManageSharing',
+        label: 'Manage Sharing',
+        severity: 'high',
+        category: 'Sharing Governance',
+        recommendation: 'Restrict sharing rule management to a minimal set of data owners.'
+      },
+      {
+        field: 'PermissionsManageIPAddresses',
+        label: 'Manage IP Addresses',
+        severity: 'high',
+        category: 'Network Security',
+        recommendation: 'Restrict login IP range administration to verified security admins.'
+      },
+      {
+        field: 'PermissionsBulkApiHardDelete',
+        label: 'Bulk API Hard Delete',
+        severity: 'high',
+        category: 'Data Deletion',
+        recommendation: 'Limit hard-delete capability via Bulk API to prevent accidental data loss.'
+      },
+      {
+        field: 'PermissionsViewAllUsers',
+        label: 'View All Users',
+        severity: 'low',
+        category: 'Identity Visibility',
+        recommendation: 'Review user visibility settings to prevent user directory harvesting.'
       }
     ];
   }

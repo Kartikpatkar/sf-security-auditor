@@ -1001,14 +1001,14 @@ function buildAuditWorkbook() {
 
   if (state.results.profiles) {
     const result = state.results.profiles;
-    addTableSheet(workbook.addWorksheet('Profiles'), {
-      title: 'Profile Inventory',
+    addTableSheet(workbook.addWorksheet('Profiles & Permission Sets'), {
+      title: 'Profile & Permission Set Inventory',
       summaryRows: [
         { metric: 'Module Last Updated', value: result.generatedAt },
         { metric: 'Metadata Source', value: summarizeMetadataSource(result.summary.enrichmentSource) },
         { metric: 'Enrichment Detail', value: result.summary.enrichmentMessage },
-        { metric: 'Profiles Loaded', value: result.summary.totalProfiles },
-        { metric: 'Profiles Enriched', value: result.summary.metadataEnrichedProfiles }
+        { metric: 'Profiles & Permission Sets Loaded', value: result.summary.totalProfiles },
+        { metric: 'Profiles & Permission Sets Enriched', value: result.summary.metadataEnrichedProfiles }
       ],
       columns: [
         { header: 'Profile Name', key: 'profileName', width: 28 },
