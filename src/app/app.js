@@ -114,21 +114,68 @@ async function initialize() {
   elements.navObjectAccess.addEventListener('click', () => setActiveView('object-access'));
   elements.navMetadata.addEventListener('click', () => setActiveView('metadata'));
 
-  const response = await chrome.runtime.sendMessage({ type: 'sfsa:getLaunchContext' });
-  const launchContext = response?.ok ? response.data : null;
+  if (typeof chrome !== 'undefined' && chrome.runtime) {
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'sfsa:getLaunchContext' });
+      const launchContext = response?.ok ? response.data : null;
 
-  setActiveView('overview');
-  updateExportAvailability();
+      setActiveView('overview');
+      updateExportAvailability();
 
-  if (launchContext?.sourceTabId) {
-    state.sourceTabId = launchContext.sourceTabId;
-    updateSourcePanel(launchContext.sourceTabId, launchContext.sourceUrl);
-    await handleDetectOrg();
-    return;
+      if (launchContext?.sourceTabId) {
+        state.sourceTabId = launchContext.sourceTabId;
+        updateSourcePanel(launchContext.sourceTabId, launchContext.sourceUrl);
+        await handleDetectOrg();
+        return;
+      }
+    } catch (e) {
+      console.warn('[SFSA] Failed to get launch context:', e);
+    }
+  } else {
+    setActiveView('overview');
+    updateExportAvailability();
   }
 
   setStatus('No Salesforce source tab', 'Open the app from a Salesforce tab, or use the reconnect action below.', 'warning');
   elements.runButton.disabled = true;
+
+  // Apply visual config
+  applyConfig(defaultConfig);
+
+  // Initialize Lucide icons
+  if (window.lucide) {
+    window.lucide.createIcons();
+  }
+
+  // Load preview SDK dynamically if in preview environment (not extension context)
+  if (typeof chrome === 'undefined' || !chrome.runtime) {
+    loadScript('/_sdk/element_sdk.js', () => {
+      if (window.elementSdk) {
+        window.elementSdk.init({
+          defaultConfig,
+          onConfigChange: async (config) => applyConfig(config),
+          mapToCapabilities: (config) => ({
+            recolorables: [
+              { get: () => config.background_color || defaultConfig.background_color, set: (v) => { config.background_color = v; window.elementSdk.setConfig({ background_color: v }); } },
+              { get: () => config.surface_color || defaultConfig.surface_color, set: (v) => { config.surface_color = v; window.elementSdk.setConfig({ surface_color: v }); } },
+              { get: () => config.text_color || defaultConfig.text_color, set: (v) => { config.text_color = v; window.elementSdk.setConfig({ text_color: v }); } },
+              { get: () => config.accent_color || defaultConfig.accent_color, set: (v) => { config.accent_color = v; window.elementSdk.setConfig({ accent_color: v }); } },
+              { get: () => config.muted_color || defaultConfig.muted_color, set: (v) => { config.muted_color = v; window.elementSdk.setConfig({ muted_color: v }); } },
+            ],
+            borderables: [],
+            fontEditable: { get: () => config.font_family || defaultConfig.font_family, set: (v) => { config.font_family = v; window.elementSdk.setConfig({ font_family: v }); } },
+            fontSizeable: { get: () => config.font_size || defaultConfig.font_size, set: (v) => { config.font_size = v; window.elementSdk.setConfig({ font_size: v }); } },
+          }),
+          mapToEditPanelValues: (config) => new Map([
+            ['app_title', config.app_title || defaultConfig.app_title],
+            ['tagline', config.tagline || defaultConfig.tagline],
+          ])
+        });
+      }
+    });
+    loadScript('/_sdk/data_sdk.js');
+    loadScript('/_sdk/telemetry_sdk.js');
+  }
 }
 
 async function handleUseCurrentTab() {
@@ -433,7 +480,7 @@ function renderProfileInventoryRows() {
 
   if (!result?.rows?.length) {
     elements.profileRowCount.textContent = '0';
-    elements.profileTableBody.innerHTML = '<tr><td colspan="13" class="empty-state table-empty-state">No profiles returned by the current audit query.</td></tr>';
+    elements.profileTableBody.innerHTML = '<tr><td colspan="15" class="empty-state table-empty-state">No profiles returned by the current audit query.</td></tr>';
     return;
   }
 
@@ -441,7 +488,7 @@ function renderProfileInventoryRows() {
   elements.profileRowCount.textContent = rows.length === result.rows.length ? String(rows.length) : `${rows.length}/${result.rows.length}`;
 
   if (!rows.length) {
-    elements.profileTableBody.innerHTML = '<tr><td colspan="13" class="empty-state table-empty-state">No profiles match the current filter and sort settings.</td></tr>';
+    elements.profileTableBody.innerHTML = '<tr><td colspan="15" class="empty-state table-empty-state">No profiles match the current filter and sort settings.</td></tr>';
     return;
   }
 
@@ -456,6 +503,8 @@ function renderProfileInventoryRows() {
       <td>${renderFlag(row.viewAllData)}</td>
       <td>${renderFlag(row.customizeApplication)}</td>
       <td>${renderFlag(row.manageUsers)}</td>
+      <td>${renderFlag(row.runReports)}</td>
+      <td>${renderFlag(row.exportReport)}</td>
       <td>${escapeHtml(row.mfaStatus)}</td>
       <td>${escapeHtml(row.sessionRestrictions)}</td>
       <td>${escapeHtml(row.loginIpRestrictions)}</td>
@@ -971,6 +1020,8 @@ function buildAuditWorkbook() {
         { header: 'View All Data', key: 'viewAllData', width: 16 },
         { header: 'Customize Application', key: 'customizeApplication', width: 20 },
         { header: 'Manage Users', key: 'manageUsers', width: 14 },
+        { header: 'Run Reports', key: 'runReports', width: 14 },
+        { header: 'Export Reports', key: 'exportReport', width: 16 },
         { header: 'MFA Status', key: 'mfaStatus', width: 24 },
         { header: 'Session Restrictions', key: 'sessionRestrictions', width: 24 },
         { header: 'Login IP Restrictions', key: 'loginIpRestrictions', width: 24 },
@@ -1081,7 +1132,13 @@ function addTableSheet(worksheet, config) {
 }
 
 function addTableAtRow(worksheet, startRow, config) {
-  worksheet.columns = config.columns;
+  config.columns.forEach((column, index) => {
+    const col = worksheet.getColumn(index + 1);
+    if (!col.width || col.width < column.width) {
+      col.width = column.width;
+    }
+  });
+
   const headerRow = worksheet.getRow(startRow);
   config.columns.forEach((column, index) => {
     const cell = headerRow.getCell(index + 1);
@@ -1195,6 +1252,8 @@ function isCenteredColumn(key) {
     'viewAllData',
     'customizeApplication',
     'manageUsers',
+    'runReports',
+    'exportReport',
     'severity',
     'read',
     'create',
@@ -1205,4 +1264,48 @@ function isCenteredColumn(key) {
     'inFolder',
     'metaFile'
   ].includes(key);
+}
+
+const defaultConfig = {
+  app_title: 'SF Security Auditor',
+  tagline: 'Privacy-first Salesforce audit workspace. All analysis runs locally in your browser.',
+  background_color: '#0f1419',
+  surface_color: '#1a2027',
+  text_color: '#e8edf2',
+  accent_color: '#22c993',
+  muted_color: '#7a8b99',
+  font_family: 'DM Sans',
+  font_size: 14
+};
+
+function applyConfig(config) {
+  const c = { ...defaultConfig, ...config };
+  const appTitle = document.getElementById('app-title');
+  if (appTitle) appTitle.textContent = c.app_title;
+  const appTagline = document.getElementById('app-tagline');
+  if (appTagline) appTagline.textContent = c.tagline;
+  document.documentElement.style.setProperty('--cfg-bg', c.background_color);
+  document.documentElement.style.setProperty('--cfg-surface', c.surface_color);
+  document.documentElement.style.setProperty('--cfg-text', c.text_color);
+  document.documentElement.style.setProperty('--cfg-accent', c.accent_color);
+  document.documentElement.style.setProperty('--cfg-muted', c.muted_color);
+  const appShell = document.querySelector('.app-shell');
+  if (appShell) {
+    appShell.style.background = c.background_color;
+    appShell.style.color = c.text_color;
+    appShell.style.fontFamily = `${c.font_family}, sans-serif`;
+  }
+  const mainScroll = document.querySelector('.main-scroll');
+  if (mainScroll) {
+    mainScroll.style.fontSize = c.font_size + 'px';
+  }
+}
+
+function loadScript(src, callback) {
+  const script = document.createElement('script');
+  script.src = src;
+  if (callback) {
+    script.onload = callback;
+  }
+  document.body.appendChild(script);
 }

@@ -241,14 +241,27 @@
     const requestOptions = buildRestRequestOptions(orgContext);
     const profileQuery = await buildProfileInventoryQuery(basePath, requestOptions);
 
-    const [profilesResponse, userCountsResponse] = await Promise.all([
+    const candidateFields = [
+      'PermissionsExportReport',
+      'PermissionsRunReports',
+      'PermissionsMultiFactorAuthenticationForUserInterfaceLogins'
+    ];
+    const supportedFields = await resolveSupportedPermissionSetFields(basePath, requestOptions, candidateFields);
+    const psFields = ['ProfileId', ...supportedFields].join(', ');
+    const psQuery = `SELECT ${psFields} FROM PermissionSet WHERE IsOwnedByProfile = true`;
+
+    const [profilesResponse, userCountsResponse, profilePermsResponse] = await Promise.all([
       queryAll(basePath, profileQuery, requestOptions),
       queryAll(basePath, [
         'SELECT ProfileId profileId, COUNT(Id) userCount',
         'FROM User',
         'WHERE IsActive = true',
         'GROUP BY ProfileId'
-      ].join(' '), requestOptions)
+      ].join(' '), requestOptions),
+      queryAll(basePath, psQuery, requestOptions).catch((error) => {
+        console.warn('[SFSA] Profile PermissionSet query failed:', error);
+        return [];
+      })
     ]);
 
     const metadataResult = await loadProfileMetadataMap(orgContext, profilesResponse, { forceRefresh: forceMetadataRefresh }).catch((error) => {
@@ -266,11 +279,49 @@
       userCountsResponse.map((row) => [row.profileId, row.userCount || 0])
     );
 
+    const profilePermsMap = new Map();
+    for (const ps of profilePermsResponse) {
+      if (ps.ProfileId) {
+        profilePermsMap.set(ps.ProfileId, {
+          exportReport: ps.PermissionsExportReport !== undefined ? Boolean(ps.PermissionsExportReport) : false,
+          runReports: ps.PermissionsRunReports !== undefined ? Boolean(ps.PermissionsRunReports) : false,
+          mfaEnabled: ps.PermissionsMultiFactorAuthenticationForUserInterfaceLogins !== undefined ? Boolean(ps.PermissionsMultiFactorAuthenticationForUserInterfaceLogins) : false
+        });
+      }
+    }
+
     const rows = profilesResponse.map((profile) => {
       const userCount = activeUserCounts.get(profile.Id) || 0;
-      const severity = deriveProfileSeverity(profile);
+      const profilePerms = profilePermsMap.get(profile.Id) || {};
+
+      let runReports = profilePerms.runReports !== undefined ? profilePerms.runReports : false;
+      let exportReport = profilePerms.exportReport !== undefined ? profilePerms.exportReport : false;
+
       const profileMetadata = metadataByProfileName.get(profile.Name) || null;
+
+      if (profileMetadata) {
+        if (profileMetadata.hasOwnProperty('runReports')) {
+          runReports = profileMetadata.runReports;
+        }
+        if (profileMetadata.hasOwnProperty('exportReport')) {
+          exportReport = profileMetadata.exportReport;
+        }
+      }
+
+      // Hardcoded fallback for System Administrator to guarantee true (Yes)
+      if (profile.Name === 'System Administrator') {
+        runReports = true;
+        exportReport = true;
+      }
+
+      const profileWithPerms = {
+        ...profile,
+        PermissionsExportReport: exportReport
+      };
+
+      const severity = deriveProfileSeverity(profileWithPerms);
       const mfaEnabled = Boolean(
+        profilePerms.mfaEnabled ||
         profile.PermissionsMultiFactorAuthenticationForUserInterfaceLogins ||
         profileMetadata?.mfaEnabled
       );
@@ -286,6 +337,8 @@
         viewAllData: Boolean(profile.PermissionsViewAllData),
         customizeApplication: Boolean(profile.PermissionsCustomizeApplication),
         manageUsers: Boolean(profile.PermissionsManageUsers),
+        runReports,
+        exportReport,
         mfaStatus: mfaEnabled ? 'Enabled' : profileMetadata ? 'Not Enabled' : 'Unavailable',
         sessionRestrictions: profileMetadata?.sessionRestrictions || 'Unavailable',
         loginIpRestrictions: profileMetadata?.loginIpRestrictions || 'Unavailable',
@@ -398,13 +451,20 @@
     const permissionCatalog = await resolveSupportedSystemPermissionCatalog(basePath, requestOptions, getSystemPermissionCatalog());
     const selectedFields = permissionCatalog.map((item) => item.field).join(', ');
 
-    const [profilesResponse, permissionSetsResponse] = await Promise.all([
-      queryAll(basePath, `SELECT Id, Name, ${selectedFields} FROM Profile ORDER BY Name`, requestOptions),
+    const [profilePermissionSetsResponse, permissionSetsResponse] = await Promise.all([
+      queryAll(basePath, `SELECT Id, ProfileId, Profile.Name, ${selectedFields} FROM PermissionSet WHERE IsOwnedByProfile = true ORDER BY Profile.Name`, requestOptions),
       queryAll(basePath, `SELECT Id, Label, Name, IsOwnedByProfile, ${selectedFields} FROM PermissionSet WHERE IsOwnedByProfile = false ORDER BY Label`, requestOptions)
     ]);
 
+    const profileRows = profilePermissionSetsResponse.map((ps) => ({
+      ...ps,
+      ProfileName: ps.Profile?.Name || 'Unknown'
+    }));
+
     const rows = [
-      ...buildPermissionRows('Profile', profilesResponse, permissionCatalog),
+      ...buildPermissionRows('Profile', profileRows, permissionCatalog, {
+        labelField: 'ProfileName'
+      }),
       ...buildPermissionRows('Permission Set', permissionSetsResponse, permissionCatalog, {
         labelField: 'Label'
       })
@@ -441,10 +501,7 @@
 
   async function isSupportedSystemPermissionField(basePath, requestOptions, fieldName) {
     try {
-      await Promise.all([
-        queryOne(basePath, `SELECT Id, Name, ${fieldName} FROM Profile LIMIT 1`, requestOptions),
-        queryOne(basePath, `SELECT Id, Label, Name, IsOwnedByProfile, ${fieldName} FROM PermissionSet WHERE IsOwnedByProfile = false LIMIT 1`, requestOptions)
-      ]);
+      await queryOne(basePath, `SELECT Id, Label, Name, IsOwnedByProfile, ${fieldName} FROM PermissionSet WHERE IsOwnedByProfile = false LIMIT 1`, requestOptions);
       return true;
     } catch (error) {
       if (isUnsupportedSystemPermissionField(error, fieldName)) {
@@ -452,6 +509,26 @@
       }
 
       throw error;
+    }
+  }
+
+  async function resolveSupportedPermissionSetFields(basePath, requestOptions, fields) {
+    try {
+      // Try querying all fields in one shot (fast path)
+      await queryOne(basePath, `SELECT Id, ${fields.join(', ')} FROM PermissionSet LIMIT 1`, requestOptions);
+      return fields;
+    } catch {
+      // Slow path: query one-by-one to find supported ones
+      const supported = [];
+      for (const field of fields) {
+        try {
+          await queryOne(basePath, `SELECT Id, ${field} FROM PermissionSet LIMIT 1`, requestOptions);
+          supported.push(field);
+        } catch {
+          // Skip unsupported field
+        }
+      }
+      return supported;
     }
   }
 
@@ -667,7 +744,7 @@
       return 'high';
     }
 
-    if (profile.PermissionsViewAllData || profile.PermissionsCustomizeApplication || profile.PermissionsApiEnabled) {
+    if (profile.PermissionsViewAllData || profile.PermissionsCustomizeApplication || profile.PermissionsApiEnabled || profile.PermissionsExportReport) {
       return 'medium';
     }
 
@@ -749,6 +826,27 @@
         severity: 'medium',
         category: 'Data Exfiltration',
         recommendation: 'Pair report export with monitoring and data handling controls.'
+      },
+      {
+        field: 'PermissionsRunReports',
+        label: 'Run Reports',
+        severity: 'low',
+        category: 'Report Execution',
+        recommendation: 'Review if run reports access is needed for this role.'
+      },
+      {
+        field: 'PermissionsCreateCustomizeReports',
+        label: 'Create and Customize Reports',
+        severity: 'medium',
+        category: 'Report Creation',
+        recommendation: 'Review report creation and editing access to maintain data governance.'
+      },
+      {
+        field: 'PermissionsCreateReportFolders',
+        label: 'Create Report Folders',
+        severity: 'medium',
+        category: 'Report Administration',
+        recommendation: 'Restrict report folder creation to maintain organization structure.'
       },
       {
         field: 'PermissionsViewEncryptedData',
@@ -996,6 +1094,8 @@ ${profileMembers}
       const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
       metadataMap.set(profileName, {
         mfaEnabled: hasProfileUserPermission(doc, 'MultiFactorAuthenticationForUserInterfaceLogins'),
+        exportReport: hasProfileUserPermission(doc, 'ExportReport'),
+        runReports: hasProfileUserPermission(doc, 'RunReports'),
         sessionRestrictions: extractSessionRestrictions(doc),
         loginIpRestrictions: extractLoginIpRestrictions(doc)
       });

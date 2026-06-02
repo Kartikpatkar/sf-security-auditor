@@ -174,6 +174,8 @@
                                     <th>View All</th>
                                     <th>Customize</th>
                                     <th>Manage Users</th>
+                                    <th>Run Reports</th>
+                                    <th>Export Report</th>
                                     <th>MFA</th>
                                     <th>Session</th>
                                     <th>IP Restrictions</th>
@@ -182,7 +184,7 @@
                             </thead>
                             <tbody id="profile-table-body">
                                 <tr>
-                                    <td colspan="13" class="text-center text-muted py-8 italic">Run profile inventory to load rows.</td>
+                                    <td colspan="15" class="text-center text-muted py-8 italic">Run profile inventory to load rows.</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -348,44 +350,6 @@
     
     <script src="../lib/exceljs.min.js"></script>
     <script type="module" src="./app.js"></script>
-    <script>
-        // Element SDK Configuration
-        const defaultConfig = {
-            app_title: 'SF Security Auditor',
-            tagline: 'Privacy-first Salesforce audit workspace. All analysis runs locally in your browser.',
-            background_color: '#0f1419',
-            surface_color: '#1a2027',
-            text_color: '#e8edf2',
-            accent_color: '#22c993',
-            muted_color: '#7a8b99',
-            font_family: 'DM Sans',
-            font_size: 14
-        };
-
-        function applyConfig(config) {
-            const c = { ...defaultConfig, ...config };
-            document.getElementById('app-title').textContent = c.app_title;
-            document.getElementById('app-tagline').textContent = c.tagline;
-            document.documentElement.style.setProperty('--cfg-bg', c.background_color);
-            document.documentElement.style.setProperty('--cfg-surface', c.surface_color);
-            document.documentElement.style.setProperty('--cfg-text', c.text_color);
-            document.documentElement.style.setProperty('--cfg-accent', c.accent_color);
-            document.documentElement.style.setProperty('--cfg-muted', c.muted_color);
-            document.querySelector('.app-shell').style.background = c.background_color;
-            document.querySelector('.app-shell').style.color = c.text_color;
-            document.querySelector('.app-shell').style.fontFamily = `${c.font_family}, sans-serif`;
-            document.querySelector('.main-scroll').style.fontSize = c.font_size + 'px';
-        }
-
-        applyConfig(defaultConfig);
-        
-        // Wait for page load to initialize Lucide icons
-        window.addEventListener('DOMContentLoaded', () => {
-            if (window.lucide) {
-                window.lucide.createIcons();
-            }
-        });
-    </script>
 </body>
 
 </html>
