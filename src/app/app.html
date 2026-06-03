@@ -17,10 +17,16 @@
   <div class="app-shell"><!-- Sidebar -->
     <div class="sidebar-scroll">
       <div class="mb-6">
-        <div class="flex items-center gap-2 mb-1">
-          <div class="w-8 h-8 rounded-lg bg-accent/20 flex items-center justify-center"><i data-lucide="shield-check"
-              class="w-4 h-4 text-accent"></i>
-          </div><span id="app-title" class="text-sm font-bold text-ink">SF Security Auditor</span>
+        <div class="flex items-center justify-between mb-1">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-accent/20 flex items-center justify-center"><i data-lucide="shield-check"
+                class="w-4 h-4 text-accent"></i>
+            </div><span id="app-title" class="text-sm font-bold text-ink">SF Security Auditor</span>
+          </div>
+          <button id="theme-toggle-button" class="btn-theme-toggle" type="button" aria-label="Toggle theme">
+            <i data-lucide="sun" class="w-4 h-4 dark-icon"></i>
+            <i data-lucide="moon" class="w-4 h-4 light-icon"></i>
+          </button>
         </div>
         <p id="app-tagline" class="text-xs text-muted mt-2 leading-relaxed">Privacy-first Salesforce audit workspace.
           All analysis runs locally in your browser.</p>

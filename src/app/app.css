@@ -308,3 +308,149 @@ select.input-field {
 .fade-in {
     animation: fadeIn .4s ease both;
 }
+
+/* Theme Toggle Button & Visibility */
+.btn-theme-toggle {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: #7a8b99;
+    padding: 6px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+.btn-theme-toggle:hover {
+    color: #e8edf2;
+    background: rgba(255, 255, 255, 0.05);
+}
+.app-shell.light-theme .btn-theme-toggle:hover {
+    color: #0f172a;
+    background: rgba(15, 23, 42, 0.05);
+}
+
+.app-shell:not(.light-theme) .light-icon {
+    display: none !important;
+}
+.app-shell:not(.light-theme) .dark-icon {
+    display: block !important;
+}
+.app-shell.light-theme .dark-icon {
+    display: none !important;
+}
+.app-shell.light-theme .light-icon {
+    display: block !important;
+}
+
+/* Light Theme Overrides */
+.app-shell.light-theme {
+    background: #f8fafc !important;
+    color: #0f172a !important;
+}
+
+.app-shell.light-theme .text-ink {
+    color: #0f172a !important;
+}
+
+.app-shell.light-theme .text-muted {
+    color: #64748b !important;
+}
+
+.app-shell.light-theme .border-border {
+    border-color: #cbd5e1 !important;
+}
+
+.app-shell.light-theme .sidebar-scroll {
+    background: #ffffff !important;
+    border-right: 1px solid #cbd5e1 !important;
+}
+
+.app-shell.light-theme .stat-card {
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important;
+}
+
+.app-shell.light-theme .stat-card.highlight {
+    background: linear-gradient(135deg, rgba(34, 201, 147, 0.08), #ffffff) !important;
+    border-color: rgba(34, 201, 147, 0.3) !important;
+}
+
+.app-shell.light-theme .content-card {
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important;
+}
+
+.app-shell.light-theme .bg-panel\/60 {
+    background-color: rgba(226, 232, 240, 0.8) !important;
+}
+
+.app-shell.light-theme .bg-card\/60 {
+    background-color: rgba(241, 245, 249, 0.8) !important;
+}
+
+.app-shell.light-theme .nav-pill {
+    color: #64748b !important;
+}
+
+.app-shell.light-theme .nav-pill:hover {
+    color: #0f172a !important;
+    background: rgba(15, 23, 42, 0.05) !important;
+}
+
+.app-shell.light-theme .nav-pill.active {
+    color: #22c993 !important;
+    background: rgba(34, 201, 147, 0.12) !important;
+}
+
+.app-shell.light-theme .btn-ghost {
+    background: #ffffff !important;
+    color: #64748b !important;
+    border-color: #cbd5e1 !important;
+}
+
+.app-shell.light-theme .btn-ghost:hover {
+    color: #0f172a !important;
+    background: #f8fafc !important;
+    border-color: #cbd5e1 !important;
+}
+
+.app-shell.light-theme .input-field {
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    color: #0f172a !important;
+}
+
+.app-shell.light-theme .input-field:focus {
+    border-color: #22c993 !important;
+}
+
+.app-shell.light-theme .audit-tbl th {
+    background: #f1f5f9 !important;
+    color: #64748b !important;
+    border-bottom: 1px solid #cbd5e1 !important;
+}
+
+.app-shell.light-theme .audit-tbl td {
+    color: #334155 !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+}
+
+.app-shell.light-theme .audit-tbl tbody tr:hover {
+    background: rgba(34, 201, 147, 0.04) !important;
+}
+
+.app-shell.light-theme .table-wrap {
+    border-color: #cbd5e1 !important;
+}
+
+.app-shell.light-theme .finding-card {
+    background: #f8fafc !important;
+    border-color: #cbd5e1 !important;
+}
+
+.app-shell.light-theme .pill-false {
+    background: rgba(15, 23, 42, 0.05) !important;
+    color: #64748b !important;
+}

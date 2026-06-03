@@ -1,7 +1,20 @@
+const defaultConfig = {
+  app_title: 'SF Security Auditor',
+  tagline: 'Privacy-first Salesforce audit workspace. All analysis runs locally in your browser.',
+  background_color: '#0f1419',
+  surface_color: '#1a2027',
+  text_color: '#e8edf2',
+  accent_color: '#22c993',
+  muted_color: '#7a8b99',
+  font_family: 'DM Sans',
+  font_size: 14
+};
+
 const state = {
   sourceTabId: null,
   orgContext: null,
   activeView: 'overview',
+  theme: 'dark',
   profileView: {
     search: '',
     severity: 'all',
@@ -88,12 +101,21 @@ const elements = {
   metadataLastRun: document.querySelector('#metadata-last-run'),
   metadataRowCount: document.querySelector('#metadata-row-count'),
   metadataTableBody: document.querySelector('#metadata-table-body'),
-  exportStatus: document.querySelector('#export-status')
+  exportStatus: document.querySelector('#export-status'),
+  themeToggleButton: document.querySelector('#theme-toggle-button')
 };
 
 initialize();
 
 async function initialize() {
+  // Apply visual config
+  applyConfig(defaultConfig);
+
+  // Initialize Lucide icons
+  if (window.lucide) {
+    window.lucide.createIcons();
+  }
+
   elements.detectButton.addEventListener('click', handleDetectOrg);
   elements.runButton.addEventListener('click', handleRunAudit);
   elements.runProfileInventoryButton.addEventListener('click', handleRunProfileInventory);
@@ -108,6 +130,19 @@ async function initialize() {
   elements.refreshMetadataInventoryButton.addEventListener('click', handleRefreshMetadataInventory);
   elements.exportWorkbookButton.addEventListener('click', handleExportWorkbook);
   elements.useCurrentTabButton.addEventListener('click', handleUseCurrentTab);
+  if (elements.themeToggleButton) {
+    elements.themeToggleButton.addEventListener('click', handleToggleTheme);
+  }
+
+  // Load saved theme preference
+  const savedTheme = localStorage.getItem('sfsa-theme') || 'dark';
+  const appShell = document.querySelector('.app-shell');
+  if (savedTheme === 'light' && appShell) {
+    appShell.classList.add('light-theme');
+    state.theme = 'light';
+  } else {
+    state.theme = 'dark';
+  }
   elements.navOverview.addEventListener('click', () => setActiveView('overview'));
   elements.navProfiles.addEventListener('click', () => setActiveView('profiles'));
   elements.navPermissions.addEventListener('click', () => setActiveView('permissions'));
@@ -138,14 +173,6 @@ async function initialize() {
 
   setStatus('No Salesforce source tab', 'Open the app from a Salesforce tab, or use the reconnect action below.', 'warning');
   elements.runButton.disabled = true;
-
-  // Apply visual config
-  applyConfig(defaultConfig);
-
-  // Initialize Lucide icons
-  if (window.lucide) {
-    window.lucide.createIcons();
-  }
 
   // Load preview SDK dynamically if in preview environment (not extension context)
   if (typeof chrome === 'undefined' || !chrome.runtime) {
@@ -798,6 +825,20 @@ function updateSourcePanel(tabId, sourceUrl) {
   }
 }
 
+function handleToggleTheme() {
+  const appShell = document.querySelector('.app-shell');
+  if (!appShell) return;
+  if (appShell.classList.contains('light-theme')) {
+    appShell.classList.remove('light-theme');
+    localStorage.setItem('sfsa-theme', 'dark');
+    state.theme = 'dark';
+  } else {
+    appShell.classList.add('light-theme');
+    localStorage.setItem('sfsa-theme', 'light');
+    state.theme = 'light';
+  }
+}
+
 function setStatus(title, message, tone = 'success') {
   elements.connectionStatus.textContent = title;
   elements.connectionStatus.classList.toggle('is-error', tone === 'error');
@@ -1274,17 +1315,7 @@ function isCenteredColumn(key) {
   ].includes(key);
 }
 
-const defaultConfig = {
-  app_title: 'SF Security Auditor',
-  tagline: 'Privacy-first Salesforce audit workspace. All analysis runs locally in your browser.',
-  background_color: '#0f1419',
-  surface_color: '#1a2027',
-  text_color: '#e8edf2',
-  accent_color: '#22c993',
-  muted_color: '#7a8b99',
-  font_family: 'DM Sans',
-  font_size: 14
-};
+
 
 function applyConfig(config) {
   const c = { ...defaultConfig, ...config };
