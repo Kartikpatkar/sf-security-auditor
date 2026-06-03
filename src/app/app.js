@@ -428,7 +428,9 @@ function renderOrgContext(orgContext) {
   elements.orgName.textContent = orgContext.pageTitle || 'Salesforce Org';
   elements.orgInstance.textContent = orgContext.instance || '-';
   elements.apiVersion.textContent = orgContext.apiVersion || '-';
-  elements.uiType.textContent = orgContext.uiType || '-';
+  if (elements.uiType) {
+    elements.uiType.textContent = orgContext.uiType || '-';
+  }
 }
 
 function renderAuditResult(result) {
@@ -441,7 +443,9 @@ function renderAuditResult(result) {
   elements.activeUsers.textContent = String(result.overview.activeUsers);
   elements.profileCount.textContent = String(result.overview.profileCount);
   elements.permissionSetCount.textContent = String(result.overview.permissionSetCount);
-  elements.uiType.textContent = result.orgContext.uiType || '-';
+  if (elements.uiType) {
+    elements.uiType.textContent = result.orgContext.uiType || '-';
+  }
   elements.orgType.textContent = result.overview.orgType || '-';
   elements.findingCount.textContent = String(result.risk.findings.length);
 
@@ -786,8 +790,12 @@ async function handleExportWorkbook() {
 }
 
 function updateSourcePanel(tabId, sourceUrl) {
-  elements.sourceTabId.textContent = tabId ? String(tabId) : '-';
-  elements.sourceOrigin.textContent = sourceUrl ? safeOrigin(sourceUrl) : '-';
+  if (elements.sourceTabId) {
+    elements.sourceTabId.textContent = tabId ? String(tabId) : '-';
+  }
+  if (elements.sourceOrigin) {
+    elements.sourceOrigin.textContent = sourceUrl ? safeOrigin(sourceUrl) : '-';
+  }
 }
 
 function setStatus(title, message, tone = 'success') {
