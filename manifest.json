@@ -1,0 +1,85 @@
+{
+  "manifest_version": 3,
+  "name": "SF Security Auditor",
+  "version": "0.1.0",
+  "description": "Privacy-first Salesforce security auditing toolkit for Chrome.",
+  "permissions": [
+    "activeTab",
+    "cookies",
+    "downloads",
+    "scripting",
+    "storage"
+  ],
+  "background": {
+    "service_worker": "src/background/service-worker.js",
+    "type": "module"
+  },
+  "icons": {
+    "16": "src/icons/icon-16.png",
+    "32": "src/icons/icon-32.png",
+    "48": "src/icons/icon-48.png",
+    "128": "src/icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "SF Security Auditor",
+    "default_icon": {
+      "16": "src/icons/icon-16.png",
+      "32": "src/icons/icon-32.png",
+      "48": "src/icons/icon-48.png",
+      "128": "src/icons/icon-128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.salesforce.com/*",
+        "https://*.lightning.force.com/*",
+        "https://*.my.salesforce.com/*",
+        "https://*.visual.force.com/*",
+        "https://*.force.com/*",
+        "https://*.salesforce-setup.com/*",
+        "https://*.my.salesforce-setup.com/*",
+        "https://login.salesforce.com/*",
+        "https://test.salesforce.com/*"
+      ],
+      "js": [
+        "src/lib/jszip.min.js",
+        "src/content/content-script.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/content/page-bridge.js",
+        "src/salesforce-scripts/org-detector.js",
+        "src/lib/jszip.min.js",
+        "src/salesforce-scripts/salesforce-api.js",
+        "src/salesforce-scripts/salesforce-members.js"
+      ],
+      "matches": [
+        "https://*.salesforce.com/*",
+        "https://*.lightning.force.com/*",
+        "https://*.my.salesforce.com/*",
+        "https://*.visual.force.com/*",
+        "https://*.force.com/*",
+        "https://*.salesforce-setup.com/*",
+        "https://*.my.salesforce-setup.com/*",
+        "https://login.salesforce.com/*",
+        "https://test.salesforce.com/*"
+      ]
+    }
+  ],
+  "host_permissions": [
+    "https://*.salesforce.com/*",
+    "https://*.lightning.force.com/*",
+    "https://*.my.salesforce.com/*",
+    "https://*.visual.force.com/*",
+    "https://*.force.com/*",
+    "https://*.salesforce-setup.com/*",
+    "https://*.my.salesforce-setup.com/*",
+    "https://login.salesforce.com/*",
+    "https://test.salesforce.com/*"
+  ]
+}
