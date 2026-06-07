@@ -4,10 +4,8 @@
   "version": "0.1.0",
   "description": "Privacy-first Salesforce security auditing toolkit for Chrome.",
   "permissions": [
-    "activeTab",
     "cookies",
     "downloads",
-    "scripting",
     "storage"
   ],
   "background": {
