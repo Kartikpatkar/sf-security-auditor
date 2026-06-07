@@ -1,95 +1,70 @@
-# SF Security Auditor
+# 🛡️ SF Security Auditor
 
-Privacy-first Salesforce security auditing Chrome Extension built on Manifest V3.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Version](https://img.shields.io/badge/Version-0.1.0-green.svg)](#)
+[![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-green.svg?logo=google-chrome)](#)
 
-## Current Status
+> **Tagline**: *Privacy-first, offline Salesforce security auditing and compliance reporting workspace built on Chrome Manifest V3.*
 
-The repository now contains the first development scaffold for the MVP:
+---
 
-- Manifest V3 extension structure
-- Background service worker for settings bootstrap
-- Salesforce content script bridge
-- Reused Salesforce helper scripts from the previous project for org detection and metadata/member inspection
-- Full-page extension app for org detection and overview audit
-- Multi-section dashboard with Overview, Profiles, Permissions, Object Access, and Metadata sections
-- Same-origin Salesforce API access from the active tab using browser session cookies
-- Styled Excel workbook export for all loaded audit modules from the full-page app, including per-sheet summary metadata such as refresh time, source, and key counts
-- Initial overview audit for org name, instance, users, profiles, permission sets, and guest-user signal
-- First real audit module: profile inventory with active-user counts, profile-level permission flags, visible MFA/session/login IP enrichment columns, metadata source/refresh status, and client-side filtering/sorting controls
-- System permissions matrix for profiles and permission sets with severity, categories, and recommendations
-- Object access matrix for profiles, permission sets, and aggregated permission set groups
-- Metadata inventory powered by the reused `OrgDetector`, `SalesforceMetadataAPI`, and `SalesforceMembers` helpers, with cache-aware refresh controls in the dashboard
+## 🌟 Overview
 
-## Why This Architecture
+**SF Security Auditor** is a local-first security auditing toolkit designed for Salesforce Administrators, security professionals, and compliance auditors. It runs entirely inside your browser client to scan, analyze, and export Salesforce security configurations—**without sending any credentials, metadata, or user statistics to external servers**.
 
-The extension currently avoids extracting or storing Salesforce session tokens. Instead, it performs same-origin requests from the active Salesforce tab through the content script. That keeps the initial implementation closer to the product goal of minimal permissions and local-only processing.
+---
 
-## Project Structure
+## 🚀 Key Features
 
-```text
-manifest.json
-package.json
-scripts/
-	validate.mjs
-src/
-	app/
-		app.css
-		app.html
-		app.js
-	background/
-		service-worker.js
-	content/
-		content-script.js
-		page-bridge.js
-```
+*   **Unified Profiles & Permission Sets Baseline**: Audit security permissions, license types, and user counts side-by-side. 
+*   **Impicit Standard Profile Mapping**: Out-of-the-box support for standard profile implicit permissions (e.g. standard report running & exporting).
+*   **System Permissions Matrix**: Scan for high-risk system access rules (e.g., *Modify All Data*, *API Enabled*, *Author Apex*).
+*   **Critical Data Compliance Auditing**: Built-in support for five core compliance permissions:
+    *   *Password Never Expires* (`PermissionsPasswordNeverExpires`)
+    *   *Manage Sharing* (`PermissionsManageSharing`)
+    *   *Manage IP Addresses* (`PermissionsManageIPAddresses`)
+    *   *Bulk API Hard Delete* (`PermissionsBulkApiHardDelete`)
+    *   *View All Users* (`PermissionsViewAllUsers`)
+*   **Object Access Matrix**: Maps CRUD operations, View All, and Modify All records across standard, custom, and managed package objects, including Permission Set Group aggregation.
+*   **Metadata Surface Snapshot**: Describe metadata types and get exact counts of Apex Classes, Custom Objects, Profiles, and Permission Sets.
+*   **Multi-Sheet Excel Workbook Export**: Export beautiful, fully formatted, styled Excel workbooks containing all audit data with custom sheet summary metadata.
+*   **Dynamic Theme Toggle**: Switch seamlessly between premium Dark Mode and Light Mode, with settings persisted locally.
+*   **CWS & MV3 Compliant**: 100% offline runtime operation with zero remote resource references (removed Google Fonts / CDNs for strict Content Security Policy compliance).
 
-## Current Workflow
+---
 
-1. Open a logged-in Salesforce tab.
-2. Click the extension action.
-3. The extension opens a dedicated full-page app tab.
-4. Detect org context.
-5. Run the overview audit.
-6. Run profile inventory from the Profiles section, then use search, severity, metadata, and sort controls to narrow the table or refresh metadata when you need a fresh retrieve.
-7. Run system permissions from the Permissions section.
-8. Run object access from the Object Access section.
-9. Run metadata inventory from the Metadata section and use Refresh inventory to bypass cached results.
-10. Export any loaded modules as a single `.xlsx` workbook from the sidebar export action, with summary rows above each module table.
+## 🔌 Supported Salesforce Domains
 
-## Supported Salesforce Origins
+The extension has configured host permissions to connect securely across the following Salesforce environments:
 
-The extension currently targets these Salesforce surfaces:
+*   Standard Instances: `https://*.salesforce.com` & `https://*.force.com`
+*   Lightning Experience: `https://*.lightning.force.com`
+*   My Domain Instances: `https://*.my.salesforce.com`
+*   Classic & Visualforce: `https://*.visual.force.com`
+*   Setup Domains: `https://*.salesforce-setup.com` & `https://*.my.salesforce-setup.com`
+*   Login Portals: `https://login.salesforce.com` & `https://test.salesforce.com`
 
-- `https://*.salesforce.com/*`
-- `https://*.lightning.force.com/*`
-- `https://*.my.salesforce.com/*`
-- `https://*.visual.force.com/*`
-- `https://*.force.com/*`
-- `https://*.salesforce-setup.com/*`
-- `https://*.my.salesforce-setup.com/*`
-- `https://login.salesforce.com/*`
-- `https://test.salesforce.com/*`
+---
 
-## Development
+## 🛠️ Development & Deployment
 
-This extension is lightweight, offline-first, and contains no external Node dependencies. All required libraries are stored locally in the `src/lib/` folder.
+The project contains no external npm dependencies, running strictly on local libraries to support offline reliability.
 
-Validate the current scaffold:
-
+### 1. Validate Codebase
+Ensure JavaScript syntax is clean and compliant:
 ```bash
 node scripts/validate.mjs
+# Output: validation ok
 ```
 
-Load the extension in Chrome:
+### 2. Load the Extension in Chrome
+1. Navigate to `chrome://extensions` in Google Chrome.
+2. Toggle **Developer mode** in the top-right corner.
+3. Click **Load unpacked** in the top-left corner.
+4. Select the root folder of this repository.
 
-1. Open `chrome://extensions`
-2. Enable Developer mode
-3. Choose Load unpacked
-4. Select this repository root
+---
 
-## MVP Next Steps
+## 📄 License
 
-- Expand the risk engine beyond initial guest-user, profile-level, and system-permission signals
-- Refine permission set group object access with muting-aware aggregation if needed
-- Add export preferences such as workbook naming, selected sheets, and save-as behavior
-- Expand metadata-backed enrichment to other controls beyond profiles
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
