@@ -261,7 +261,7 @@
     const [profilesResponse, userCountsResponse, profilePermsResponse, psUserCountsResponse, permSetsResponse] = await Promise.all([
       queryAll(basePath, profileQuery, requestOptions),
       queryAll(basePath, [
-        'SELECT ProfileId profileId, COUNT(Id) userCount',
+        'SELECT ProfileId, COUNT(Id) userCount',
         'FROM User',
         'WHERE IsActive = true',
         'GROUP BY ProfileId'
@@ -271,7 +271,7 @@
         return [];
       }),
       queryAll(basePath, [
-        'SELECT PermissionSetId psId, COUNT(AssigneeId) userCount',
+        'SELECT PermissionSetId, COUNT(AssigneeId) userCount',
         'FROM PermissionSetAssignment',
         'WHERE Assignee.IsActive = true',
         'GROUP BY PermissionSetId'
@@ -297,7 +297,7 @@
     const metadataByProfileName = metadataResult.metadataByProfileName;
 
     const activeUserCounts = new Map(
-      userCountsResponse.map((row) => [row.profileId, row.userCount || 0])
+      userCountsResponse.map((row) => [row.ProfileId, row.userCount || 0])
     );
 
     const profilePermsMap = new Map();
@@ -318,7 +318,8 @@
       let runReports = profilePerms.runReports !== undefined ? profilePerms.runReports : false;
       let exportReport = profilePerms.exportReport !== undefined ? profilePerms.exportReport : false;
 
-      const profileMetadata = metadataByProfileName.get(profile.Name) || null;
+      const metadataName = STANDARD_PROFILE_METADATA_NAMES[profile.Name] || profile.Name;
+      const profileMetadata = metadataByProfileName.get(metadataName) || metadataByProfileName.get(decodeURIComponent(metadataName)) || null;
 
       if (profileMetadata) {
         if (profileMetadata.hasOwnProperty('runReports')) {
@@ -369,7 +370,7 @@
     });
 
     const activePSUserCounts = new Map(
-      psUserCountsResponse.map((row) => [row.psId, row.userCount || 0])
+      psUserCountsResponse.map((row) => [row.PermissionSetId, row.userCount || 0])
     );
 
     const permSetRows = permSetsResponse.map((ps) => {
@@ -573,19 +574,24 @@
   }
 
   async function resolveSupportedSystemPermissionCatalog(basePath, requestOptions, permissionCatalog) {
-    const supportedCatalog = [];
-
-    for (const permission of permissionCatalog) {
-      if (await isSupportedSystemPermissionField(basePath, requestOptions, permission.field)) {
-        supportedCatalog.push(permission);
+    try {
+      const fields = permissionCatalog.map((p) => p.field).join(', ');
+      await queryOne(basePath, `SELECT Id, ${fields} FROM PermissionSet LIMIT 1`, requestOptions);
+      return permissionCatalog;
+    } catch {
+      const supportedCatalog = [];
+      for (const permission of permissionCatalog) {
+        if (await isSupportedSystemPermissionField(basePath, requestOptions, permission.field)) {
+          supportedCatalog.push(permission);
+        }
       }
-    }
 
-    if (!supportedCatalog.length) {
-      throw new Error('No supported system permission fields were available for this org.');
-    }
+      if (!supportedCatalog.length) {
+        throw new Error('No supported system permission fields were available for this org.');
+      }
 
-    return supportedCatalog;
+      return supportedCatalog;
+    }
   }
 
   async function isSupportedSystemPermissionField(basePath, requestOptions, fieldName) {
@@ -846,6 +852,23 @@
     }
     return /custom/i.test(profileName) || /clone/i.test(profileName);
   }
+
+  const STANDARD_PROFILE_METADATA_NAMES = {
+    'System Administrator': 'Admin',
+    'Standard User': 'Standard',
+    'Marketing User': 'MarketingProfile',
+    'Contract Manager': 'ContractManager',
+    'Solution Manager': 'SolutionManager',
+    'Read Only': 'ReadOnly',
+    'Standard Platform User': 'StandardAura',
+    'Partner Community User': 'Partner',
+    'Customer Community User': 'CustomerCommunity',
+    'Customer Community Plus User': 'CustomerCommunityPlus',
+    'Gold Partner User': 'GoldPartner',
+    'Silver Partner User': 'SilverPartner',
+    'Database.com Admin User': 'DatabaseAdmin',
+    'Analytics Cloud Integration User': 'AnalyticsIntegrationProfile'
+  };
 
   function getStandardProfileDefaultPermissions(profileName) {
     const standardProfiles = {
@@ -1204,7 +1227,7 @@ ${profileMembers}
   }
 
   async function waitForMetadataRetrieve(metadataApi, retrieveId) {
-    for (let attempt = 0; attempt < 20; attempt += 1) {
+    for (let attempt = 0; attempt < 80; attempt += 1) {
       const status = await metadataApi.checkRetrieveStatus(retrieveId);
 
       if (status.done && status.success && status.zipFile) {
@@ -1229,7 +1252,7 @@ ${profileMembers}
 
     for (const entry of profileEntries) {
       const text = await entry.async('string');
-      const profileName = entry.name.split('/').pop().replace(/\.profile-meta\.xml$/i, '');
+      const profileName = decodeURIComponent(entry.name.split('/').pop().replace(/\.profile-meta\.xml$/i, ''));
       results.set(profileName, text);
     }
 
