@@ -110,12 +110,12 @@ The extension operates **100% locally in-browser**, leveraging your active Sales
 
 ### 🔷 Light Mode
 
-![Light Mode - Main Page](./assets/screenshots/Main%20Page%20-%20Light%20Theme.png)
-![Light Mode - Profile Inventory](./assets/screenshots/Profile%20Inventory%20-%20Light%20Theme.png)
+![Light Mode - Main Page](./assets/screenshots/Main%20Screen%20-%20Light%20Theme.png)
+![Light Mode - Profile Inventory](./assets/screenshots/Profile%20Screen%20-%20Light%20Theme.png)
 
 ### 🌑 Dark Mode
 
-![Dark Mode - Main Page](./assets/screenshots/Main%20Page%20-%20Dark%20Theme.png)
+![Dark Mode - Main Page](./assets/screenshots/Main%20Screen%20-%20Dark%20Theme.png)
 
 ---
 
