@@ -46,7 +46,7 @@ English
 
 | Asset | Dimensions | Status | Filename |
 |-------|-----------|--------|----------|
-| Store Icon | 128×128 PNG | ✅ Ready | `src/icons/icon-128.png` |
+| Store Icon | 128×128 PNG | ✅ Ready | `assets/icons/icon-128.png` |
 | Screenshot 1 | 1280×800 | ⬜ Not created | `assets/screenshots/overview_dashboard.png` |
 | Screenshot 2 | 1280×800 | ⬜ Not created | `assets/screenshots/profile_inventory.png` |
 | Screenshot 3 | 1280×800 | ⬜ Not created | `assets/screenshots/system_permissions.png` |

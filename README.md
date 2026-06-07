@@ -1,67 +1,138 @@
-# 🛡️ SF Security Auditor
+# 🛡️ SF Security Auditor – Privacy-First Salesforce Audit & Compliance Workspace
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/Version-0.1.0-green.svg)](#)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Version](https://img.shields.io/badge/Version-0.1.0-blue.svg)](#)
 [![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-green.svg?logo=google-chrome)](#)
+[![Salesforce](https://img.shields.io/badge/Salesforce-Metadata%20API-00A1E0.svg)](#)
 
-> **Tagline**: *Privacy-first, offline Salesforce security auditing and compliance reporting workspace built on Chrome Manifest V3.*
+> **Tagline**: *Audit, analyze, and export Salesforce profiles, system permissions, and object access locally—securely, privately, and instantly.*
 
 ---
 
-## 🌟 Overview
+## ✨ Overview
 
-**SF Security Auditor** is a local-first security auditing toolkit designed for Salesforce Administrators, security professionals, and compliance auditors. It runs entirely inside your browser client to scan, analyze, and export Salesforce security configurations—**without sending any credentials, metadata, or user statistics to external servers**.
+**SF Security Auditor** is a modern, privacy-first **Chrome Extension** that helps you **audit Salesforce security baselines, map object access permissions, analyze risk profiles, and generate audit-ready Excel reports** directly from your browser—no credential storage, no middleware, and no external servers.
+
+Built for Salesforce administrators, security architects, and compliance officers who need to review:
+
+*   Profiles and Permission Sets configurations side-by-side
+*   System permissions risk exposure (e.g., *Modify All Data*, *API Enabled*)
+*   Data compliance requirements (e.g., *Manage IP Addresses*, *Bulk API Hard Delete*)
+*   CRUD operations and record access boundaries
+*   Metadata types and code footprint counts
+
+The extension operates **100% locally in-browser**, leveraging your active Salesforce session cookies to compile detailed audit matrices with speed and strict data privacy.
 
 ---
 
 ## 🚀 Key Features
 
-*   **Unified Profiles & Permission Sets Baseline**: Audit security permissions, license types, and user counts side-by-side. 
-*   **Impicit Standard Profile Mapping**: Out-of-the-box support for standard profile implicit permissions (e.g. standard report running & exporting).
-*   **System Permissions Matrix**: Scan for high-risk system access rules (e.g., *Modify All Data*, *API Enabled*, *Author Apex*).
-*   **Critical Data Compliance Auditing**: Built-in support for five core compliance permissions:
-    *   *Password Never Expires* (`PermissionsPasswordNeverExpires`)
-    *   *Manage Sharing* (`PermissionsManageSharing`)
-    *   *Manage IP Addresses* (`PermissionsManageIPAddresses`)
-    *   *Bulk API Hard Delete* (`PermissionsBulkApiHardDelete`)
-    *   *View All Users* (`PermissionsViewAllUsers`)
-*   **Object Access Matrix**: Maps CRUD operations, View All, and Modify All records across standard, custom, and managed package objects, including Permission Set Group aggregation.
-*   **Metadata Surface Snapshot**: Describe metadata types and get exact counts of Apex Classes, Custom Objects, Profiles, and Permission Sets.
-*   **Multi-Sheet Excel Workbook Export**: Export beautiful, fully formatted, styled Excel workbooks containing all audit data with custom sheet summary metadata.
-*   **Dynamic Theme Toggle**: Switch seamlessly between premium Dark Mode and Light Mode, with settings persisted locally.
-*   **CWS & MV3 Compliant**: 100% offline runtime operation with zero remote resource references (removed Google Fonts / CDNs for strict Content Security Policy compliance).
+### 🔐 Salesforce Org Detection & Local Connection
+
+*   Automatically detects the **currently active Salesforce tab**
+*   Supports all Salesforce instances:
+    *   Production
+    *   Sandbox
+    *   Developer Edition
+    *   Scratch Orgs
+*   Uses active browser session cookies (`sid` cookie)
+*   No complex OAuth setups
+*   No credentials stored or transmitted off-device
+*   Real-time connection status pill with detailed org metrics (Instance, API version, UI Type, Org Type)
 
 ---
 
-## 🔌 Supported Salesforce Domains
+### 👥 Unified Profiles & Permission Sets Inventory
 
-The extension has configured host permissions to connect securely across the following Salesforce environments:
-
-*   Standard Instances: `https://*.salesforce.com` & `https://*.force.com`
-*   Lightning Experience: `https://*.lightning.force.com`
-*   My Domain Instances: `https://*.my.salesforce.com`
-*   Classic & Visualforce: `https://*.visual.force.com`
-*   Setup Domains: `https://*.salesforce-setup.com` & `https://*.my.salesforce-setup.com`
-*   Login Portals: `https://login.salesforce.com` & `https://test.salesforce.com`
+*   Inventories Salesforce Profiles and Permission Sets side-by-side in a single view
+*   **Active User Assignment Counts**: Queries real-time active user assignments to prioritize high-impact rows
+*   **Standard Profile Permission Overrides**: Applies hardcoded Salesforce default report permissions so standard profiles show actual implicit settings (e.g. standard report running and exporting)
+*   **Detailed Metadata Enrichment**: Retrieves metadata archives to extract:
+    *   MFA Status
+    *   Session timeout settings
+    *   Login IP restrictions
+*   **Client-Side Controls**: Search, sort (e.g., *Severity: High → Low*, *Users: High → Low*), and filter (by severity and metadata enrichment status) rows in real-time
 
 ---
 
-## 🛠️ Development & Deployment
+### 🛡️ System Permissions & Compliance Audits
 
-The project contains no external npm dependencies, running strictly on local libraries to support offline reliability.
+*   Scans 19 high-value system permissions across all profiles and permission sets
+*   Pre-configured **System Permission Catalog** containing severity flags, compliance categories, and actionable recommendations
+*   **Data Compliance Auditing**: Evaluates five critical compliance permissions:
+    *   `PermissionsPasswordNeverExpires` (Password Never Expires)
+    *   `PermissionsManageSharing` (Manage Sharing)
+    *   `PermissionsManageIPAddresses` (Manage IP Addresses)
+    *   `PermissionsBulkApiHardDelete` (Bulk API Hard Delete)
+    *   `PermissionsViewAllUsers` (View All Users)
+*   **Smart Query Engine**: Optimizes org loading times using a fast-path query block to detect supported permissions in a single request, preventing round-trip latency
 
-### 1. Validate Codebase
-Ensure JavaScript syntax is clean and compliant:
+---
+
+### 📊 Object Access Matrix
+
+*   Aggregates Object CRUD (Read, Create, Edit, Delete) and View All/Modify All records permissions
+*   Supports mapping across:
+    *   Standard Objects
+    *   Custom Objects (`__c`)
+    *   Managed Package Objects (`__` namespaces)
+*   **Permission Set Groups Support**: Automatically maps and resolves aggregated object permissions inherited through active Permission Set Groups
+
+---
+
+### 📂 Metadata Surface Snapshot
+
+*   Queries and inspects all metadata types defined in the connected org
+*   Fetches total counts for Apex Classes, Custom Objects, Profiles, and Permission Sets
+*   Bypasses caches dynamically using refresh controls to pull fresh metadata members
+
+---
+
+### 📊 Formatted Excel Reports Export
+
+*   Generates **fully formatted, styled multi-sheet Excel workbooks** locally in-browser
+*   Separate sheets generated automatically for *Overview*, *Profiles & Permission Sets*, *Permissions*, *Object Access*, and *Metadata*
+*   **Summary Metadata Rows**: Includes timestamps, metadata sources, and summary counts above each table
+*   Exports files named cleanly based on org name and timestamp (e.g., `sf-security-auditor/org-name/timestamp/audit-workbook.xlsx`)
+
+---
+
+### 🌓 Premium Theme Workspace
+
+*   Beautiful sidebar visual layout with glassmorphic elements
+*   **Light & Dark Theme Toggle**: Easily switch styling overrides with a simple toggle button
+*   Persistent theme state saved locally in the browser (`localStorage`)
+*   **CWS & MV3 Compliant**: Zero external dependencies or CDN calls (all fonts and libraries are fully packaged offline to comply with Chrome Web Store CSP rules)
+
+---
+
+## 📸 Screenshots
+
+### 🔷 Light Mode
+
+![Light Mode - Main Page](./assets/screenshots/Main%20Page%20-%20Light%20Theme.png)
+![Light Mode - Profile Inventory](./assets/screenshots/Profile%20Inventory%20-%20Light%20Theme.png)
+
+### 🌑 Dark Mode
+
+![Dark Mode - Main Page](./assets/screenshots/Main%20Page%20-%20Dark%20Theme.png)
+
+---
+
+## 🛠️ Installation & Development
+
+### 1. Load the Extension in Chrome
+1. Navigate to `chrome://extensions` in Google Chrome.
+2. Enable **Developer mode** in the top-right corner.
+3. Click **Load unpacked** in the top-left corner.
+4. Select the root folder of this repository.
+
+### 2. Validate Project Syntax
+Verify code compliance and syntax correctness:
 ```bash
 node scripts/validate.mjs
 # Output: validation ok
 ```
-
-### 2. Load the Extension in Chrome
-1. Navigate to `chrome://extensions` in Google Chrome.
-2. Toggle **Developer mode** in the top-right corner.
-3. Click **Load unpacked** in the top-left corner.
-4. Select the root folder of this repository.
 
 ---
 
