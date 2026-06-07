@@ -59,9 +59,7 @@ English
 | Permission | Type | Justification |
 |------------|------|---------------|
 | `cookies` | permissions | Used to fetch the active session token (`sid` cookie) for the matching Salesforce subdomain to execute local query APIs. |
-| `activeTab` | permissions | Grants transient access to the linked active Salesforce tab to establish secure message passing on launch. |
 | `downloads` | permissions | Required to download the generated multi-sheet Excel security workbook directly to the user's local Downloads folder. |
-| `scripting` | permissions | Allows programmatic injection of the query-runner runtime script (`content-script.js`) when context is lost or reconnect is initiated. |
 | `storage` | permissions | Persists local visual configuration settings and light/dark theme preference across sessions. |
 | `https://*.salesforce.com/*` | host_permissions | Allows execution of CORS-compliant SOAP and REST requests to gather security metrics from standard Salesforce instances. |
 | `https://*.lightning.force.com/*` | host_permissions | Resolves and connects to Salesforce Lightning UI tabs to execute local query sessions. |

@@ -909,26 +909,11 @@ async function sendTabRuntimeMessage(tabId, message) {
   try {
     return await chrome.tabs.sendMessage(tabId, message);
   } catch (error) {
-    if (!isMissingReceiverError(error)) {
-      throw error;
+    if (isMissingReceiverError(error)) {
+      throw new Error('Connection to the Salesforce tab was lost. Please refresh your Salesforce tab and click "Detect Org" to reconnect.');
     }
-
-    await ensureContentRuntime(tabId);
-    return chrome.tabs.sendMessage(tabId, message);
+    throw error;
   }
-}
-
-async function ensureContentRuntime(tabId) {
-  const tab = await chrome.tabs.get(tabId);
-
-  if (!tab?.url || !isSupportedSalesforceUrl(tab.url) || isExtensionPage(tab.url)) {
-    throw new Error('The linked tab is no longer a supported Salesforce page. Reconnect to a supported tab and try again.');
-  }
-
-  await chrome.scripting.executeScript({
-    target: { tabId },
-    files: ['src/content/content-script.js']
-  });
 }
 
 function isMissingReceiverError(error) {
