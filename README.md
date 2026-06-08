@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Version](https://img.shields.io/badge/Version-0.1.0-blue.svg)](#)
-[![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-green.svg?logo=google-chrome)](#)
+[![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-green.svg?logo=google-chrome)](https://chromewebstore.google.com/detail/mbanedjmimggapgpcnlhbndmdmehpolj?utm_source=item-share-cb)
 [![Salesforce](https://img.shields.io/badge/Salesforce-Metadata%20API-00A1E0.svg)](#)
 
 > **Tagline**: *Audit, analyze, and export Salesforce profiles, system permissions, and object access locally—securely, privately, and instantly.*
